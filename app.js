@@ -9998,18 +9998,22 @@ Guidelines:
       <div class="model-3d-hint" style="bottom:4.8rem;">💡 Click "Roast on Charcoal" to lower skewer. Click "Roll 90°" to cook all 4 sides evenly!</div>
     `;
 
-    const width = container.clientWidth || 800;
-    const height = container.clientHeight || 260;
+    const width = container.clientWidth || 900;
+    const height = container.clientHeight || 420;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x07080D);
 
-    const camera = new THREE.PerspectiveCamera(44, width / height, 0.1, 1000);
-    camera.position.set(0, 72, 148);
-    camera.lookAt(0, -6, 0);
+    const isMobileStage = width < 640;
+    const camera = new THREE.PerspectiveCamera(isMobileStage ? 52 : 44, width / height, 0.1, 1100);
+    camera.position.set(0, isMobileStage ? 104 : 72, isMobileStage ? 268 : 158);
+    camera.lookAt(0, isMobileStage ? -8 : -6, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileStage ? 1.4 : 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
     renderer.setSize(width, height);
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
@@ -10195,6 +10199,34 @@ Guidelines:
     });
     const smokePoints = new THREE.Points(smokeGeo, smokeMat);
     scene.add(smokePoints);
+
+    // Soft volumetric-looking smoke plumes use layered radial sprites for a fuller hearth.
+    const smokeCanvas = document.createElement('canvas');
+    smokeCanvas.width = smokeCanvas.height = 128;
+    const smokeContext = smokeCanvas.getContext('2d');
+    const smokeGradient = smokeContext.createRadialGradient(64, 64, 5, 64, 64, 62);
+    smokeGradient.addColorStop(0, 'rgba(235,228,218,0.48)');
+    smokeGradient.addColorStop(0.42, 'rgba(193,185,176,0.25)');
+    smokeGradient.addColorStop(0.78, 'rgba(145,139,135,0.08)');
+    smokeGradient.addColorStop(1, 'rgba(100,98,100,0)');
+    smokeContext.fillStyle = smokeGradient;
+    smokeContext.fillRect(0, 0, 128, 128);
+    const smokeTexture = new THREE.CanvasTexture(smokeCanvas);
+    const smokeSpriteMaterial = new THREE.SpriteMaterial({
+      map: smokeTexture, color: 0xffffff, transparent: true,
+      opacity: 0.24, depthWrite: false, blending: THREE.NormalBlending
+    });
+    const smokePlumes = [];
+    for (let i = 0; i < (width < 640 ? 10 : 18); i++) {
+      const material = smokeSpriteMaterial.clone();
+      const sprite = new THREE.Sprite(material);
+      const scale = 12 + Math.random() * 17;
+      sprite.scale.set(scale, scale * (1.25 + Math.random() * 0.5), 1);
+      sprite.position.set((Math.random() - 0.5) * 36, 28 + Math.random() * 52, (Math.random() - 0.5) * 28);
+      material.opacity = 0.08 + Math.random() * 0.13;
+      scene.add(sprite);
+      smokePlumes.push({ sprite, baseScale: scale, drift: (Math.random() - 0.5) * 0.08, phase: Math.random() * Math.PI * 2 });
+    }
 
     // 5. Procedural Culinary Texture Generator for High Realism
     const createFoodCanvasTexture = (type) => {
@@ -10958,6 +10990,21 @@ Guidelines:
       }
       sparkGeo.attributes.position.needsUpdate = true;
 
+      // Soft smoke sprites rise, widen and fade before gently respawning above the hearth.
+      smokePlumes.forEach((plume, index) => {
+        const sprite = plume.sprite;
+        sprite.position.y += (0.13 + (index % 4) * 0.025) * heatMultiplier * roastBoost;
+        sprite.position.x += plume.drift + Math.sin(time + plume.phase) * 0.035;
+        const age = Math.max(0, Math.min(1, (sprite.position.y - 28) / 66));
+        const swell = 1 + age * 1.5;
+        sprite.scale.set(plume.baseScale * swell, plume.baseScale * swell * 1.45, 1);
+        sprite.material.opacity = (0.06 + Math.sin(time + plume.phase) * 0.025) * (1 - age * 0.62);
+        if (sprite.position.y > 94) {
+          sprite.position.set((Math.random() - 0.5) * 32, 20 + Math.random() * 8, (Math.random() - 0.5) * 24);
+          sprite.material.opacity = 0.1 + Math.random() * 0.1;
+        }
+      });
+
       // Culinary Smoke Puffs Physics
       const sArr = smokeGeo.attributes.position.array;
       for (let i = 0; i < smokeCount; i++) {
@@ -10983,25 +11030,38 @@ Guidelines:
       const w = container.clientWidth;
       const h = container.clientHeight;
       if (w === 0 || h === 0) return;
+      const mobileStage = w < 640;
+      camera.fov = mobileStage ? 52 : 44;
+      camera.position.set(0, mobileStage ? 104 : 72, mobileStage ? 268 : 158);
+      camera.lookAt(0, mobileStage ? -8 : -6, 0);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobileStage ? 1.4 : 2));
       renderer.setSize(w, h, false);
     };
 
+    let tandoorResizeObserver = null;
     if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => handleResize());
-      ro.observe(container);
+      tandoorResizeObserver = new ResizeObserver(() => handleResize());
+      tandoorResizeObserver.observe(container);
     }
 
     this.active3DScenes.set('tandoor', {
       dispose: () => {
         cancelAnimationFrame(animId);
+        tandoorResizeObserver?.disconnect();
         sound.stopContinuousSizzle();
         drippingDrops.forEach(d => {
           scene.remove(d.mesh);
           d.mesh.geometry.dispose();
           d.mesh.material.dispose();
         });
+        smokePlumes.forEach(plume => {
+          scene.remove(plume.sprite);
+          plume.sprite.material.dispose();
+        });
+        smokeTexture.dispose();
+        smokeSpriteMaterial.dispose();
         renderer.dispose();
       },
       setPaused: (p) => {
