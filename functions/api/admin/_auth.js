@@ -51,6 +51,16 @@ function getCookie(request, name) {
   return "";
 }
 
+function sameOriginRequest(request) {
+  const origin = request.headers.get("Origin");
+  if (origin) {
+    try { return new URL(origin).origin === new URL(request.url).origin; }
+    catch { return false; }
+  }
+  const site = request.headers.get("Sec-Fetch-Site");
+  return site === "same-origin" || site === "none";
+}
+
 function configurationError() {
   return jsonResponse({
     success: false,
@@ -66,6 +76,9 @@ function unauthorized() {
 }
 
 export async function createAdminSession(context, pin) {
+  if (!sameOriginRequest(context.request)) {
+    return jsonResponse({ success: false, error: "Admin sign-in requests must be same-origin." }, 403);
+  }
   const env = context.env || {};
   if (!env.ADMIN_PIN || !env.ADMIN_SESSION_SECRET || String(env.ADMIN_SESSION_SECRET).length < 32) {
     return configurationError();
@@ -89,6 +102,9 @@ export async function createAdminSession(context, pin) {
 }
 
 export async function requireAdmin(context) {
+  if (!sameOriginRequest(context.request)) {
+    return { ok: false, response: jsonResponse({ success: false, error: "Admin requests must be same-origin." }, 403) };
+  }
   const env = context.env || {};
   if (!env.ADMIN_PIN || !env.ADMIN_SESSION_SECRET || String(env.ADMIN_SESSION_SECRET).length < 32) {
     return { ok: false, response: configurationError() };

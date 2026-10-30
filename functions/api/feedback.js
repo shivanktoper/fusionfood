@@ -1,4 +1,5 @@
 // Cloudflare Pages Function: /api/feedback
+import { authorizeApiRequest } from './_api-auth.js';
 // Handles GET (Read feedback list or stats) and POST (Submit new feedback/rating)
 
 function jsonResponse(data, status = 200) {
@@ -15,7 +16,7 @@ async function ensureFeedbackTable(db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,
       user_name TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'student',
+      role TEXT NOT NULL DEFAULT 'parent',
       rating INTEGER NOT NULL DEFAULT 5,
       category TEXT NOT NULL DEFAULT 'general',
       recipe_id TEXT DEFAULT NULL,
@@ -29,6 +30,8 @@ async function ensureFeedbackTable(db) {
 // 1. READ ACCESS (GET /api/feedback)
 // ====================================================================
 export async function onRequestGet(context) {
+  const access = await authorizeApiRequest(context, 'read');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
@@ -113,6 +116,8 @@ export async function onRequestGet(context) {
 // 2. WRITE ACCESS (POST /api/feedback)
 // ====================================================================
 export async function onRequestPost(context) {
+  const access = await authorizeApiRequest(context, 'write');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
@@ -129,7 +134,7 @@ export async function onRequestPost(context) {
 
   const userId = (body.userId || body.id || 'anonymous').toString().trim();
   const userName = (body.userName || body.name || 'Anonymous Chef').toString().trim();
-  const role = body.role === 'parent' ? 'parent' : 'student';
+  const role = body.role === 'student' ? 'student' : 'parent';
   const category = (body.category || 'general').toString().trim();
   const recipeId = body.recipeId ? body.recipeId.toString().trim() : null;
   const comment = (body.comment || body.message || '').toString().trim();

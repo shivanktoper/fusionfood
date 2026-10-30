@@ -1,4 +1,5 @@
 // Cloudflare Pages Function: /api/leaderboard
+import { authorizeApiRequest } from './_api-auth.js';
 // Handles GET (Read leaderboard rankings) and POST (Write/Upsert leaderboard entry)
 
 function jsonResponse(data, status = 200) {
@@ -14,6 +15,8 @@ const VALID_FILTERS = new Set(['all', 'overall', 'hotPotato', 'buildDish', 'triv
 // 1. READ ACCESS (GET /api/leaderboard)
 // ====================================================================
 export async function onRequestGet(context) {
+  const access = await authorizeApiRequest(context, 'read');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
@@ -28,8 +31,8 @@ export async function onRequestGet(context) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL,
         user_name TEXT NOT NULL,
-        avatar TEXT NOT NULL DEFAULT '🎒',
-        role TEXT NOT NULL DEFAULT 'student',
+        avatar TEXT NOT NULL DEFAULT '👨‍🍳',
+        role TEXT NOT NULL DEFAULT 'parent',
         level INTEGER NOT NULL DEFAULT 1,
         game_type TEXT NOT NULL DEFAULT 'overall',
         score INTEGER NOT NULL DEFAULT 0,
@@ -108,6 +111,8 @@ export async function onRequestGet(context) {
 // 2. WRITE ACCESS (POST /api/leaderboard)
 // ====================================================================
 export async function onRequestPost(context) {
+  const access = await authorizeApiRequest(context, 'write');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
@@ -127,7 +132,7 @@ export async function onRequestPost(context) {
   let gameType = (body.gameType || 'overall').toString().trim();
   if (gameType === 'all') gameType = 'overall';
   const avatar = (body.avatar || '🎒').toString().trim();
-  const role = body.role === 'parent' ? 'parent' : 'student';
+  const role = body.role === 'student' ? 'student' : 'parent';
   const country = (body.country || 'Global').toString().trim();
   const score = parseInt(body.score, 10) || 0;
   const xp = Math.max(0, parseInt(body.xp, 10) || 0);
@@ -152,8 +157,8 @@ export async function onRequestPost(context) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL,
         user_name TEXT NOT NULL,
-        avatar TEXT NOT NULL DEFAULT '🎒',
-        role TEXT NOT NULL DEFAULT 'student',
+        avatar TEXT NOT NULL DEFAULT '👨‍🍳',
+        role TEXT NOT NULL DEFAULT 'parent',
         level INTEGER NOT NULL DEFAULT 1,
         game_type TEXT NOT NULL DEFAULT 'overall',
         score INTEGER NOT NULL DEFAULT 0,

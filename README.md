@@ -37,12 +37,12 @@ The Pages workflow deliberately publishes only `index.html`, `bundle.js`, `style
 
 ---
 
-## 🎮 6 Admin-Toggleable Interactive Games
+## 🎮 5 Admin-Toggleable Interactive Games
 
 ### 1. 🥘 Build-a-Dish (Pantry Rush & Recipe Simulation)
 * **Step-by-Step Cooking Lab**: Observe real ingredient transformations through Base Prep, Marinade, Sizzle/Bake, and Garnish phases.
 * **Timed Pantry Rush**: Tap authentic vegetarian ingredients while avoiding non-vegetarian or mismatched impostor ingredients (e.g., fish sauce, blue cheese, raw meat).
-* **Kid & Parent Tags**: Safe steps (whisking, decorating) are flagged for kids, while hot stovetop/oven steps feature parent supervision tags.
+* **Cooking Technique Notes**: Each step includes practical technique guidance and sensible hot-surface safety reminders.
 
 ### 2. 🗣️ Pronunciation Challenge & Phonetic Matching
 * **International Accents**: Master authentic IPA notations and phonetic syllables (`/ti.ɾaˈði.to/` -> *tee-rah-DEE-toh*).
@@ -53,14 +53,9 @@ The Pages workflow deliberately publishes only `index.html`, `bundle.js`, `style
 ### 3. 🧠 Family Tag-Team Trivia Quiz
 * **10 Curated Questions**: Dive into culinary history, Indian bazaar substitutes, and food chemistry.
 * **Gentle Soft Timer**: Earn bonus speed XP without any negative penalties for taking time to discuss.
-* **"Parent Hint" Button**: Brainstorm together with helpful real-world cooking hints.
+* **Chef Hint Button**: Explore helpful real-world cooking and food-science hints.
 
-### 4. 🗺️ India Availability Map & City Quest
-* **Interactive SVG Map**: Explore regional fusion adoption across the cities represented in the map.
-* **Availability Matrix**: Filter dishes by *Emerging/Niche*, *Moderate*, and *High* availability.
-* **Bazaar Quests**: Discover authentic local markets that stock replacement ingredients.
-
-### 5. 🎡 Spin the Wheel & Culinary Food Science
+### 4. 🎡 Spin the Wheel & Culinary Food Science
 * **Dynamic Physics Wheel**: Spin across 6 core food chemistry concepts:
   * *Citrus Acid Denaturation* (How lime juice "cooks" ceviche)
   * *The Maillard Reaction* (The browning chemistry behind tandoor naanzas)
@@ -70,7 +65,7 @@ The Pages workflow deliberately publishes only `index.html`, `bundle.js`, `style
   * *Fat-Soluble Spice Volatiles* (Why tadka in hot oil/ghee awakens spices)
 * **Rapid Science Challenge**: Answer an instant food chemistry mini-question to win +50 Bonus XP!
 
-### 6. 🥔 Hot Potato Rush
+### 5. 🥔 Hot Potato Rush
 * **60-second round**: A fixed countdown is visible during both the standard arena and fullscreen arcade.
 * **Round controls**: Start and replay begin a fresh 60-second session; pausing freezes the standard arena clock and resume continues from the remaining time.
 * **Timed finish**: When the countdown reaches zero, gameplay stops and the final score is presented.
@@ -92,7 +87,7 @@ Every fusion dish includes a full Indian kitchen adaptation:
 ---
 
 ## 🏆 Family Leaderboard & 6-Tier Chef Rank Ladder
-* **Switchable Profiles**: Toggle between **Kid Chef Maya** 🧒 and **Parent Sous-Chef** 👨‍🍳 with one click.
+* **Single Adult Chef Profile**: One consistent adult difficulty across the cooking games, with no child-profile switching.
 * **6 Culinary Ranks**:
   1. *Kitchen Apprentice* (0–250 XP)
   2. *Spice Explorer* (251–600 XP)
@@ -100,17 +95,16 @@ Every fusion dish includes a full Indian kitchen adaptation:
   4. *Fusion Sous Chef* (1101–1700 XP)
   5. *Executive Fusion Master* (1701–2500 XP)
   6. *Michelin Star Sorcerer* (2501+ XP)
-* **Trophy Badges & Streaks**: Daily streak multipliers and personal best tracking saved automatically to `localStorage`.
+* **Trophy Badges & Streaks**: Daily streak multipliers and personal best tracking saved automatically to the visitor's profile.
 
 ---
 
 ## Admin Controls
-* Open **Tools → Admin Settings** from the site header.
-* On first use, create a browser-local PIN of at least 8 characters. The PIN is stored as a salted PBKDF2-derived hash.
-* This is a **local interface lock only**. It does not secure Cloudflare D1 data, API routes, or other server-side operations.
-* Toggle which of the 6 games appear and manage local family settings.
 
----
+* Open **Tools → Admin Settings** from the site header.
+* Admin sign-in is verified on the server. The session is held in a short-lived, signed, `HttpOnly`, `Secure`, `SameSite=Strict` cookie; no browser-local PIN is used.
+* Configure `ADMIN_PIN` and a random `ADMIN_SESSION_SECRET` of at least 32 characters as Cloudflare Pages secrets. Admin feature/version settings are saved in D1 and loaded by every visitor.
+* The **API Key Generator** issues scoped `ff_live_...` tokens for `/api/leaderboard` and `/api/feedback`. `read` keys can call GET; `read_write` and `admin` keys can call GET and POST. Only a SHA-256 token hash is stored in D1; the raw token is displayed once at creation.
 
 ## 🎨 Visual & Audio System
 * **Warm Illustrated Cookbook Styling**: Tactile cream/parchment background, terracotta saffron accents, and recipe tape accents.
@@ -120,9 +114,16 @@ Every fusion dish includes a full Indian kitchen adaptation:
 
 ## Admin and trust notes
 
-The application no longer ships a default administrator PIN or seeded API-token examples. On first use, an administrator creates a browser-local PIN; it is stored as a salted PBKDF2-derived hash. This is a **local interface lock only**, not server-side authentication and not a security boundary for server data or API operations. Do not store production secrets in browser code or local storage.
+Production administrator credentials are Cloudflare secrets, never frontend code or browser storage. Admin sessions are signed, short-lived cookies. Generated API tokens are stored as SHA-256 hashes and should be copied securely when first displayed. Global site settings live in the shared D1 database; personal profile details, progress and theme choices remain local to each browser.
 
-The sample family testimonials and sample score-verification entries have been removed. Ratings now show an empty state until visitors post real feedback.
+For Cloudflare Pages, add secrets from **Workers & Pages → your Pages project → Settings → Variables and Secrets**:
+
+* `ADMIN_PIN` — the administrator PIN (use a unique, strong value).
+* `ADMIN_SESSION_SECRET` — at least 32 random characters, used to sign sessions.
+
+The project uses the `migrations/` directory for new D1 tables and cleanup operations. The deployment workflow applies migrations to the `foodfusionweb` D1 database before deploying the Pages app and API Worker.
+
+For optional provider-backed features, configure these as Cloudflare secrets (on both Pages Functions and the standalone Worker when both hosts are used): `GEMINI_API_KEY`, `CLOUDFLARE_AI_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ELEVENLABS_API_KEY`, and optionally `ELEVENLABS_VOICE_ID`. The app sends prompts and speech text to same-origin API proxies; provider secrets are never stored in local storage or exposed in browser JavaScript.
 
 ## Hot Potato round duration
 

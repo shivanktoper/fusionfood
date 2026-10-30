@@ -5541,3 +5541,322 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .header-inner { min-height:52px; }
   .hp-fullscreen-dialog { max-height:100dvh; }
 }
+
+
+
+/* ========================================================
+   FUSION FOOD LAB — RESPONSIVE 3D & SCROLL POLISH
+   ======================================================== */
+
+/* Build-a-Dish selector: tactile saffron/terracotta rail in both themes. */
+.recipe-selector-row {
+  scrollbar-width: thin;
+  scrollbar-color: #c56b45 rgba(184, 133, 104, 0.16);
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.45rem 0.2rem 0.85rem;
+}
+.recipe-selector-row::-webkit-scrollbar {
+  height: 8px;
+}
+.recipe-selector-row::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(184, 133, 104, 0.16);
+}
+.recipe-selector-row::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #a84d32, #e5a04d, #bc6b43) padding-box;
+}
+.recipe-selector-row::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #8f3c2a, #f1b45d, #a94d32) padding-box;
+}
+[data-theme="dark"] .recipe-selector-row {
+  scrollbar-color: #e3a15a rgba(255, 255, 255, 0.1);
+}
+[data-theme="dark"] .recipe-selector-row::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+[data-theme="dark"] .recipe-selector-row::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, #bd663e, #edb35c, #d4844d) padding-box;
+}
+
+/* Larger ingredient showcase with adaptive contrast and room for the canvas HUD. */
+.dish-3d-canvas-container {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 260px !important;
+  height: clamp(260px, 31vw, 350px);
+  margin: 0.9rem 0 0;
+  overflow: hidden;
+  isolation: isolate;
+  border: 1px solid rgba(194, 145, 105, 0.35);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(234, 192, 137, 0.22), transparent 55%),
+    linear-gradient(145deg, #e9e1d5, #d6c9b8);
+  box-shadow: 0 14px 34px rgba(54, 34, 23, 0.16), inset 0 1px 0 rgba(255,255,255,0.6);
+  touch-action: pan-y;
+}
+.dish-3d-canvas-container canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+[data-theme="dark"] .dish-3d-canvas-container {
+  border-color: rgba(226, 167, 100, 0.25);
+  background:
+    radial-gradient(ellipse at 50% 42%, rgba(170, 100, 47, 0.22), transparent 58%),
+    linear-gradient(145deg, #181a21, #0d1017);
+  box-shadow: 0 16px 38px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.dish-3d-canvas-container .model-3d-hud {
+  top: 0.75rem;
+  left: 0.85rem;
+  right: 0.85rem;
+  z-index: 3;
+  gap: 0.5rem;
+}
+.dish-3d-canvas-container .model-3d-badge {
+  background: rgba(17, 20, 27, 0.82);
+  color: #fff;
+  border-color: rgba(255,255,255,0.15);
+  box-shadow: 0 5px 16px rgba(0,0,0,0.15);
+}
+.dish-3d-canvas-container .model-3d-hint {
+  bottom: 0.7rem;
+  z-index: 3;
+  color: #fff;
+  background: rgba(17, 20, 27, 0.76);
+  border: 1px solid rgba(255,255,255,0.12);
+  max-width: calc(100% - 1.5rem);
+  text-align: center;
+  white-space: normal;
+}
+
+/* A wider, taller hearth makes the clay body, skewers and smoke visible at a glance. */
+#tandoor-3d-stage,
+.tandoor-3d-stage-container {
+  width: 100%;
+  max-width: 1160px;
+  aspect-ratio: 16 / 9;
+  min-height: 360px;
+  max-height: 520px;
+  margin: 1rem auto 1.5rem;
+  border-radius: 22px;
+  border: 1px solid rgba(207, 133, 76, 0.42);
+  background:
+    radial-gradient(ellipse at 50% 60%, rgba(245, 158, 11, 0.22), transparent 57%),
+    linear-gradient(155deg, #201b1b, #0e1118 72%);
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow: 0 18px 46px rgba(0,0,0,0.28), 0 0 34px rgba(214, 112, 45, 0.12);
+  contain: layout paint;
+}
+#tandoor-3d-stage canvas,
+.tandoor-3d-stage-container canvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+#tandoor-3d-stage .model-3d-hud,
+.tandoor-3d-stage-container .model-3d-hud {
+  top: 0.9rem;
+  left: 1rem;
+  right: 1rem;
+  gap: 0.55rem;
+  align-items: flex-start;
+}
+#tandoor-3d-stage .model-3d-hud > div,
+.tandoor-3d-stage-container .model-3d-hud > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  min-width: 0;
+}
+#tandoor-3d-stage .model-3d-badge,
+.tandoor-3d-stage-container .model-3d-badge {
+  color: #fff;
+  background: rgba(11, 14, 21, 0.83);
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  box-shadow: 0 5px 18px rgba(0,0,0,0.24);
+  line-height: 1.35;
+}
+#tandoor-3d-stage .model-3d-hint,
+.tandoor-3d-stage-container .model-3d-hint {
+  z-index: 5;
+  bottom: 7.25rem !important;
+  max-width: calc(100% - 2rem);
+  padding: 0.35rem 0.8rem;
+  white-space: normal;
+  text-align: center;
+  color: #fff;
+  background: rgba(10, 12, 18, 0.72);
+  border: 1px solid rgba(255,255,255,0.13);
+}
+#tandoor-3d-stage .tandoor-controls-dock,
+.tandoor-3d-stage-container .tandoor-controls-dock {
+  z-index: 12 !important;
+  bottom: 0.7rem !important;
+  width: min(96%, 900px) !important;
+  max-width: 900px !important;
+  gap: 0.55rem !important;
+}
+#tandoor-3d-stage #tandoor-doneness-wrap,
+.tandoor-3d-stage-container #tandoor-doneness-wrap {
+  max-width: 660px !important;
+  padding: 0.45rem 0.85rem !important;
+  background: rgba(11, 14, 21, 0.9) !important;
+  border-color: rgba(245, 158, 11, 0.28) !important;
+}
+#tandoor-3d-stage #tandoor-ingredients-status-strip,
+.tandoor-3d-stage-container #tandoor-ingredients-status-strip {
+  flex-wrap: wrap;
+  justify-content: center !important;
+  column-gap: 0.9rem;
+  row-gap: 0.2rem;
+  line-height: 1.35;
+}
+#tandoor-3d-stage .tandoor-heat-controls,
+.tandoor-3d-stage-container .tandoor-heat-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+}
+#tandoor-3d-stage .tandoor-heat-btn,
+.tandoor-3d-stage-container .tandoor-heat-btn {
+  min-height: 40px;
+  padding: 0.48rem 0.85rem;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  background: rgba(19, 24, 33, 0.92);
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #f8fafc;
+}
+#tandoor-3d-stage .tandoor-heat-btn.active,
+.tandoor-3d-stage-container .tandoor-heat-btn.active {
+  border-color: #f5a64c;
+  background: linear-gradient(135deg, #9a3412, #d97706);
+  box-shadow: 0 4px 16px rgba(217,119,6,0.25);
+}
+#tandoor-3d-stage .tandoor-roast-main-btn,
+.tandoor-3d-stage-container .tandoor-roast-main-btn {
+  min-height: 42px;
+  padding: 0.55rem 1rem;
+  white-space: nowrap;
+}
+[data-theme="light"] #tandoor-3d-stage,
+[data-theme="light"] .tandoor-3d-stage-container {
+  border-color: rgba(158, 91, 50, 0.34);
+  box-shadow: 0 18px 42px rgba(86, 52, 30, 0.2), 0 0 26px rgba(216, 137, 60, 0.16);
+}
+
+/* Text labels in the header tool menu remain explicit and readable on all screens. */
+.header-tool-action {
+  color: var(--text-main);
+}
+.header-tool-action span {
+  line-height: 1.3;
+}
+
+/* Small screens: controls wrap into touch-friendly rows instead of clipping the hearth. */
+@media (max-width: 700px) {
+  .dish-3d-canvas-container {
+    height: 300px;
+    min-height: 280px !important;
+  }
+  .dish-3d-canvas-container .model-3d-hud {
+    left: 0.55rem;
+    right: 0.55rem;
+    top: 0.55rem;
+  }
+  .dish-3d-canvas-container .model-3d-badge {
+    font-size: 0.66rem;
+    padding: 0.25rem 0.5rem;
+  }
+  #tandoor-3d-stage,
+  .tandoor-3d-stage-container {
+    aspect-ratio: 5 / 4;
+    min-height: 450px;
+    max-height: 520px;
+    margin: 0.75rem auto 1.1rem;
+  }
+  #tandoor-3d-stage .model-3d-hud,
+  .tandoor-3d-stage-container .model-3d-hud {
+    top: 0.6rem;
+    left: 0.6rem;
+    right: 0.6rem;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  #tandoor-3d-stage .model-3d-hud > div:last-child,
+  .tandoor-3d-stage-container .model-3d-hud > div:last-child {
+    align-self: flex-end;
+  }
+  #tandoor-3d-stage .model-3d-hint,
+  .tandoor-3d-stage-container .model-3d-hint {
+    bottom: 8.8rem !important;
+    font-size: 0.66rem;
+  }
+  #tandoor-3d-stage .tandoor-controls-dock,
+  .tandoor-3d-stage-container .tandoor-controls-dock {
+    bottom: 0.45rem !important;
+    width: calc(100% - 0.8rem) !important;
+    gap: 0.4rem !important;
+  }
+  #tandoor-3d-stage #tandoor-doneness-wrap,
+  .tandoor-3d-stage-container #tandoor-doneness-wrap {
+    padding: 0.36rem 0.55rem !important;
+  }
+  #tandoor-3d-stage #tandoor-doneness-wrap > div:first-child,
+  .tandoor-3d-stage-container #tandoor-doneness-wrap > div:first-child {
+    font-size: 0.67rem !important;
+  }
+  #tandoor-3d-stage #tandoor-ingredients-status-strip,
+  .tandoor-3d-stage-container #tandoor-ingredients-status-strip {
+    font-size: 0.61rem !important;
+    column-gap: 0.55rem;
+  }
+  #tandoor-3d-stage .tandoor-heat-controls,
+  .tandoor-3d-stage-container .tandoor-heat-controls {
+    width: 100%;
+    gap: 0.3rem;
+  }
+  #tandoor-3d-stage .tandoor-heat-btn,
+  .tandoor-3d-stage-container .tandoor-heat-btn {
+    flex: 1 1 30%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 0.4rem 0.35rem;
+    font-size: 0.68rem;
+  }
+  #tandoor-3d-stage .tandoor-roast-main-btn,
+  .tandoor-3d-stage-container .tandoor-roast-main-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0.45rem 0.7rem;
+    font-size: 0.76rem;
+  }
+}
+@media (max-width: 380px) {
+  #tandoor-3d-stage,
+  .tandoor-3d-stage-container {
+    min-height: 470px;
+  }
+  #tandoor-3d-stage .model-3d-hud .model-3d-badge,
+  .tandoor-3d-stage-container .model-3d-hud .model-3d-badge {
+    font-size: 0.62rem;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .recipe-selector-row { scroll-behavior: auto; }
+}
