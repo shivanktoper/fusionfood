@@ -1,5 +1,6 @@
 // Server-side culinary assistant proxy.
 // Provider credentials stay in Cloudflare secrets and are never sent to browsers.
+import { checkServiceRateLimit } from "./_rate-limit.js";
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -14,7 +15,7 @@ function sameOrigin(request) {
     catch { return false; }
   }
   const site = request.headers.get("Sec-Fetch-Site");
-  return !site || site === "same-origin" || site === "none";
+  return site === "same-origin" || site === "none";
 }
 
 export async function onRequestGet({ request, env }) {
@@ -31,6 +32,8 @@ export async function onRequestGet({ request, env }) {
 
 export async function onRequestPost({ request, env }) {
   if (!sameOrigin(request)) return json({ success: false, error: "Same-origin requests only." }, 403);
+  const limit = await checkServiceRateLimit(request, env, "assistant", 12);
+  if (!limit.allowed) return limit.response;
   const length = Number(request.headers.get("Content-Length") || 0);
   if (length > 24000) return json({ success: false, error: "Prompt is too large." }, 413);
 
