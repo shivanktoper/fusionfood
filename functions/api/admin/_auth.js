@@ -58,7 +58,7 @@ function sameOriginRequest(request) {
     catch { return false; }
   }
   const site = request.headers.get("Sec-Fetch-Site");
-  return !site || site === "same-origin" || site === "none";
+  return site === "same-origin" || site === "none";
 }
 
 function configurationError() {
