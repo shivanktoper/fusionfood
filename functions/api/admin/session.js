@@ -1,5 +1,14 @@
 import { createAdminSession, requireAdmin, clearAdminSession } from "./_auth.js";
 
+export async function onRequestGet(context) {
+  const auth = await requireAdmin(context);
+  if (!auth.ok) return auth.response;
+  return new Response(JSON.stringify({ success: true, authenticated: true }), {
+    status: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }
+  });
+}
+
 export async function onRequestPost(context) {
   const length = Number(context.request.headers.get("Content-Length") || 0);
   if (length > 2048) {
