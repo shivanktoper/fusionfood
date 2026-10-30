@@ -16,7 +16,7 @@ async function ensureFeedbackTable(db) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,
       user_name TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'student',
+      role TEXT NOT NULL DEFAULT 'parent',
       rating INTEGER NOT NULL DEFAULT 5,
       category TEXT NOT NULL DEFAULT 'general',
       recipe_id TEXT DEFAULT NULL,
@@ -134,7 +134,7 @@ export async function onRequestPost(context) {
 
   const userId = (body.userId || body.id || 'anonymous').toString().trim();
   const userName = (body.userName || body.name || 'Anonymous Chef').toString().trim();
-  const role = body.role === 'parent' ? 'parent' : 'student';
+  const role = body.role === 'student' ? 'student' : 'parent';
   const category = (body.category || 'general').toString().trim();
   const recipeId = body.recipeId ? body.recipeId.toString().trim() : null;
   const comment = (body.comment || body.message || '').toString().trim();
