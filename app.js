@@ -1650,7 +1650,7 @@ const STUDENT_RANKS = [
 ];
 
 const PARENT_RANKS = [
-  { level: 1, title: 'Sous-Chef Guide', minXP: 0, maxXP: 450, badge: '👨‍🍳', perks: 'Leading culinary adventures with safe technique.' },
+  { level: 1, title: 'Kitchen Apprentice', minXP: 0, maxXP: 450, badge: '🔥', perks: 'Building confident technique and balanced flavour.' },
   { level: 2, title: 'Recipe Master', minXP: 451, maxXP: 1200, badge: '🥘', perks: 'Mastering food science emulsions and acid curing.' },
   { level: 3, title: 'Executive Fusion Chef', minXP: 1201, maxXP: 99999, badge: '⭐', perks: 'Ultimate family fusion maestro! Zero culinary secrets left.' }
 ];
@@ -2313,7 +2313,7 @@ function fusionFoodIcon(name, size = 25) {
 }
 
 const DEFAULT_STATE = {
-  currentProfile: 'kid',
+  currentProfile: 'parent',
   currentTab: 'games', // 'games', 'kitchen', 'leaderboard'
   onboarded: false,
   hpMode: 'native', // 'native' or 'itch'
@@ -2321,8 +2321,8 @@ const DEFAULT_STATE = {
   leaderboardScope: 'global', // 'global' (Global Hall of Fame)
   profiles: {
     kid: {
-      name: 'Maya',
-      role: 'student', // 'student' or 'parent'
+      name: 'Chef',
+      role: 'parent', // 'student' or 'parent'
       rankLevel: 1,
       avatar: '🎒',
       xp: 270,
@@ -2331,27 +2331,26 @@ const DEFAULT_STATE = {
       unlockedBadges: ['🌱 Junior Taster', '🍄 Shroom Alchemist', '🥘 Dish Master']
     },
     parent: {
-      name: 'Chef Priya',
+      name: 'Chef',
       role: 'parent',
       rankLevel: 1,
       avatar: '👨‍🍳',
       xp: 450,
       streak: 5,
       bests: { hotPotato: 20, trivia: 9, buildDish: 6, pronunciation: 7, scienceSpins: 8 },
-      unlockedBadges: ['👨‍🍳 Sous-Chef Guide', '🔥 Tandoor Wizard', '🎌🇵🇪 Nikkei Explorer']
+      unlockedBadges: ['🔥 Tandoor Specialist', '🎌🇵🇪 Nikkei Explorer']
     }
   },
   gameToggles: {
     buildDish: true,
     pronunciation: true,
     trivia: true,
-    indiaMap: true,
+    indiaMap: false,
     hotPotato: true,
     spinScience: true
   },
   appVersion: 'v2', // 'v1' (Classic), 'v2' (Modern Redesign), 'v3' (AI & AR Vision)
   v2Features: {
-    leaderboardInHeader: true,
     fusionExplorerTab: true,
     hotPotatoEnhanced: true,
     expandedWheel: true,
@@ -4129,9 +4128,7 @@ class FusionApp {
         if (parsed.gameToggles && parsed.gameToggles.hotPotato === undefined) {
           parsed.gameToggles.hotPotato = true;
         }
-        if (parsed.gameToggles && parsed.gameToggles.indiaMap === undefined) {
-          parsed.gameToggles.indiaMap = true;
-        }
+        if (parsed.gameToggles) parsed.gameToggles.indiaMap = false;
         delete parsed.adminPin;
         if (Array.isArray(parsed.apiKeys)) {
           parsed.apiKeys = parsed.apiKeys.filter(key => !['key_master_admin', 'key_public_ro'].includes(key.keyId) && !/^ff_live_(adm|ro)_/.test(key.token || ''));
@@ -4152,6 +4149,14 @@ class FusionApp {
         }
         if (!parsed.appVersion) {
           parsed.appVersion = 'v2';
+        }
+        parsed.currentProfile = 'parent';
+        parsed.activeGameTab = parsed.activeGameTab === 'indiaMap' ? 'buildDish' : parsed.activeGameTab;
+        if (parsed.profiles && parsed.profiles.parent) {
+          parsed.profiles.parent.role = 'parent';
+          if (!parsed.profiles.parent.name || parsed.profiles.parent.name === 'Chef Priya') parsed.profiles.parent.name = 'Chef';
+          parsed.profiles.parent.avatar = '👨‍🍳';
+          parsed.profiles.parent.unlockedBadges = (parsed.profiles.parent.unlockedBadges || []).filter(b => !String(b).includes('Sous-Chef Guide'));
         }
         return { 
           ...DEFAULT_STATE, 
@@ -4183,7 +4188,7 @@ class FusionApp {
           Object.entries(this.state.profiles).forEach(([id, prof]) => {
             this.db.set(DB_CONFIG.STORE_PROFILES, { id, ...prof, updatedAt: new Date().toISOString() });
           });
-          const leaderboardEntries = Object.entries(this.state.profiles).map(([id, prof]) => {
+          const leaderboardEntries = Object.entries(this.state.profiles).filter(([id]) => id !== 'kid').map(([id, prof]) => {
             const r = this.getCurrentRank(prof.xp, prof.role);
             return {
               id,
@@ -4258,7 +4263,7 @@ class FusionApp {
     this.state.profiles.kid.bests = { hotPotato: 0, trivia: 0, buildDish: 0, pronunciation: 0, scienceSpins: 0 };
     this.state.profiles.parent.bests = { hotPotato: 0, trivia: 0, buildDish: 0, pronunciation: 0, scienceSpins: 0 };
     this.state.profiles.kid.unlockedBadges = ['🌱 Junior Taster'];
-    this.state.profiles.parent.unlockedBadges = ['👨‍🍳 Sous-Chef Guide'];
+    this.state.profiles.parent.unlockedBadges = ['🔥 Tandoor Specialist'];
     this.state.completedCityQuests = [];
     this.state.recipeCompletedSteps = {};
 
@@ -4409,31 +4414,16 @@ class FusionApp {
   }
 
   getDifficultySettings() {
-    const prof = this.getActiveProfile();
-    const isStudent = prof.role === 'student' || this.state.currentProfile === 'kid';
-    if (isStudent) {
-      return {
-        role: 'student',
-        triviaTimer: 50,
-        hpGravity: 0.22,
-        hpCoalsBoost: -8.5,
-        coalsHeight: 70,
-        impostorCount: 3,
-        badgeText: '🎒 Student Mode (Forgiving Timers & Hints)',
-        badgeClass: 'student-mode-badge'
-      };
-    } else {
-      return {
-        role: 'parent',
-        triviaTimer: 25,
-        hpGravity: 0.32,
-        hpCoalsBoost: -7.0,
-        coalsHeight: 45,
-        impostorCount: 6,
-        badgeText: '👨‍🍳 Parent Mode (Pro Kitchen Challenge)',
-        badgeClass: 'parent-mode-badge'
-      };
-    }
+    return {
+      role: 'parent',
+      triviaTimer: 25,
+      hpGravity: 0.32,
+      hpCoalsBoost: -7.0,
+      coalsHeight: 45,
+      impostorCount: 6,
+      badgeText: '👨‍🍳 Adult Chef · Standard Challenge',
+      badgeClass: 'parent-mode-badge'
+    };
   }
 
   getCurrentRank(xp, role = null) {
@@ -4464,189 +4454,51 @@ class FusionApp {
     document.body.classList.remove('has-modal-open');
   }
 
-  openLeaderboardModal() {
-    sound.playClick();
-    const modal = document.getElementById('leaderboard-modal');
-    if (!modal) return;
-    modal.classList.add('open');
-    document.body.classList.add('has-modal-open');
-    this.renderLeaderboardModalContent();
-  }
-
-  closeLeaderboardModal() {
-    sound.playClick();
-    const modal = document.getElementById('leaderboard-modal');
-    if (!modal) return;
-    modal.classList.remove('open');
-    document.body.classList.remove('has-modal-open');
-  }
-
-  renderLeaderboardModalContent() {
-    const body = document.getElementById('leaderboard-modal-body');
-    if (!body) return;
-    const list = this.getLeaderboardData ? this.getLeaderboardData() : (this.state.leaderboard || []);
-    body.innerHTML = `
-      <div style="padding:0.5rem 0;">
-        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">Top ranked chefs across all interactive arcade labs and kitchen challenges.</p>
-        <div class="table-responsive-wrapper">
-          <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
-            <thead>
-              <tr style="border-bottom:2px solid var(--border-color);">
-                <th style="padding:0.6rem 0.5rem;">Rank</th>
-                <th style="padding:0.6rem 0.5rem;">Chef</th>
-                <th style="padding:0.6rem 0.5rem;">Game</th>
-                <th style="padding:0.6rem 0.5rem;">Score</th>
-                <th style="padding:0.6rem 0.5rem;">Badge</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${list.length === 0 ? `
-                <tr>
-                  <td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-muted);">
-                    No local scores recorded yet. Complete games to appear on the roster!
-                  </td>
-                </tr>
-              ` : list.slice(0, 10).map((r, i) => `
-                <tr style="border-bottom:1px solid var(--border-color);">
-                  <td style="padding:0.5rem; font-weight:800; color:var(--primary);">#${i + 1}</td>
-                  <td style="padding:0.5rem; font-weight:700;">${this.escapeHtml(r.name || 'Anonymous')}</td>
-                  <td style="padding:0.5rem; color:var(--text-muted);">${this.escapeHtml(r.game || 'Arcade')}</td>
-                  <td style="padding:0.5rem; font-weight:800; color:var(--text-main);">${r.score || 0}</td>
-                  <td style="padding:0.5rem;">${r.badge || '🌟'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-        <div style="margin-top:1.25rem; display:flex; justify-content:flex-end;">
-          <button class="btn btn-primary" id="btn-modal-open-full-leaderboard" style="padding:0.45rem 1rem; font-size:0.84rem;">
-            📊 View Full Rankings & Ladders Page →
-          </button>
-        </div>
-      </div>
-    `;
-
-    body.querySelector('#btn-modal-open-full-leaderboard')?.addEventListener('click', () => {
-      this.closeLeaderboardModal();
-      this.switchMainTab('leaderboard');
-    });
-  }
-
   renderProfileModalContent() {
     const body = document.getElementById('profile-modal-body');
     if (!body) return;
-    const prof = this.getActiveProfile();
-    const currentRole = prof.role || (this.state.currentProfile === 'parent' ? 'parent' : 'student');
-    const currentName = prof.name || (currentRole === 'parent' ? 'Chef Priya' : 'Maya');
+    const profile = this.state.profiles.parent || DEFAULT_STATE.profiles.parent;
+    const currentName = profile.name || 'Chef';
+    const currentRank = profile.rankLevel || 1;
 
     body.innerHTML = `
-      <div style="margin-bottom:1.25rem;">
-        <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
-          Select your chef role to personalize your family kitchen challenge, timer speeds, and ranks!
-        </p>
-
-        <label style="display:block; font-weight:700; font-size:0.9rem; margin-bottom:0.5rem; color:var(--text-main);">
-          Choose Chef Identity:
-        </label>
-        <div class="profile-role-grid" role="radiogroup" aria-label="Choose Chef Identity">
-          <button type="button" class="profile-role-card ${currentRole === 'student' ? 'selected' : ''}" id="role-select-student" role="radio" aria-checked="${currentRole === 'student' ? 'true' : 'false'}" style="text-align:center; font-family:inherit;">
-            <div style="font-size:2rem; margin-bottom:0.35rem;">🎒</div>
-            <strong style="font-size:1rem; display:block;">Student / Kid Chef</strong>
-            <span style="font-size:0.78rem; color:var(--text-muted);">Forgiving Timers (50s) & Safe Steps</span>
-          </button>
-
-          <button type="button" class="profile-role-card ${currentRole === 'parent' ? 'selected' : ''}" id="role-select-parent" role="radio" aria-checked="${currentRole === 'parent' ? 'true' : 'false'}" style="text-align:center; font-family:inherit;">
-            <div style="font-size:2rem; margin-bottom:0.35rem;">👨‍🍳</div>
-            <strong style="font-size:1rem; display:block;">Parent / Adult Guide</strong>
-            <span style="font-size:0.78rem; color:var(--text-muted);">Pro Challenge (25s) & Tricky Impostors</span>
-          </button>
-        </div>
-
+      <div class="profile-editor-minimal">
+        <p style="color:var(--text-muted); margin-bottom:1rem;">Personalise your chef profile and continue with the standard adult challenge.</p>
         <div class="profile-form-group">
-          <label for="profile-input-name">Your Chef Name:</label>
-          <input type="text" id="profile-input-name" class="profile-form-input" value="${currentName}" placeholder="e.g. Maya or Chef Mom" maxlength="24">
+          <label for="profile-input-name">Chef name</label>
+          <input type="text" id="profile-input-name" class="profile-form-input" value="${this.escapeHtml(currentName)}" maxlength="24" autocomplete="name">
         </div>
-
         <div class="profile-form-group">
-          <label for="profile-select-rank">Starting / Current Rank:</label>
+          <label for="profile-select-rank">Current rank</label>
           <select id="profile-select-rank" class="profile-form-select">
-            ${(currentRole === 'parent' ? PARENT_RANKS : STUDENT_RANKS).map(r => `
-              <option value="${r.level}" ${r.level === (prof.rankLevel || 1) ? 'selected' : ''}>
-                ${r.badge} Level ${r.level}: ${r.title} (${r.minXP}+ XP)
-              </option>
-            `).join('')}
+            ${PARENT_RANKS.map(rank => `<option value="${rank.level}" ${rank.level === currentRank ? 'selected' : ''}>${rank.badge} Level ${rank.level}: ${rank.title} (${rank.minXP}+ XP)</option>`).join('')}
           </select>
         </div>
-
-        <button class="btn btn-primary" id="save-profile-btn" style="width:100%; padding:0.85rem; font-size:1.05rem; margin-top:0.75rem;">
-          ✨ Let's Cook & Play!
-        </button>
+        <button class="btn btn-primary" id="save-profile-btn" style="width:100%; margin-top:.75rem;">Save chef profile</button>
       </div>
     `;
 
-    // Role switcher events inside modal
-    let selectedRole = currentRole;
-    const cardStudent = body.querySelector('#role-select-student');
-    const cardParent = body.querySelector('#role-select-parent');
-    const rankSelect = body.querySelector('#profile-select-rank');
-
-    const updateRankDropdown = (role) => {
-      const list = role === 'parent' ? PARENT_RANKS : STUDENT_RANKS;
-      rankSelect.innerHTML = list.map(r => `
-        <option value="${r.level}">
-          ${r.badge} Level ${r.level}: ${r.title} (${r.minXP}+ XP)
-        </option>
-      `).join('');
-    };
-
-    cardStudent?.addEventListener('click', () => {
-      sound.playClick();
-      selectedRole = 'student';
-      cardStudent.classList.add('selected');
-      cardStudent.setAttribute('aria-checked', 'true');
-      cardParent.classList.remove('selected');
-      cardParent.setAttribute('aria-checked', 'false');
-      updateRankDropdown('student');
-    });
-
-    cardParent?.addEventListener('click', () => {
-      sound.playClick();
-      selectedRole = 'parent';
-      cardParent.classList.add('selected');
-      cardParent.setAttribute('aria-checked', 'true');
-      cardStudent.classList.remove('selected');
-      cardStudent.setAttribute('aria-checked', 'false');
-      updateRankDropdown('parent');
-    });
-
     body.querySelector('#save-profile-btn')?.addEventListener('click', () => {
-      const nameInput = body.querySelector('#profile-input-name');
-      const name = nameInput ? nameInput.value.trim() : (selectedRole === 'parent' ? 'Chef Priya' : 'Maya');
-      const rankLevel = parseInt(rankSelect ? rankSelect.value : '1', 10);
-      this.saveProfile(name || (selectedRole === 'parent' ? 'Chef Priya' : 'Maya'), selectedRole, rankLevel);
+      const name = body.querySelector('#profile-input-name')?.value.trim() || 'Chef';
+      const rankLevel = Number.parseInt(body.querySelector('#profile-select-rank')?.value || '1', 10);
+      this.saveProfile(name, 'parent', rankLevel);
     });
   }
 
   saveProfile(name, role, rankLevel) {
     sound.playCorrect();
-    const profileKey = role === 'parent' ? 'parent' : 'kid';
+    const profileKey = 'parent';
     this.state.currentProfile = profileKey;
-    const ranks = role === 'parent' ? PARENT_RANKS : STUDENT_RANKS;
-    const chosenRank = ranks.find(r => r.level === rankLevel) || ranks[0];
-
-    if (!this.state.profiles[profileKey]) {
-      this.state.profiles[profileKey] = {};
-    }
-    const prof = this.state.profiles[profileKey];
-    prof.name = name;
-    prof.role = role;
-    prof.rankLevel = rankLevel;
-    prof.avatar = role === 'parent' ? '👨‍🍳' : '🎒';
-    if (prof.xp < chosenRank.minXP) {
-      prof.xp = chosenRank.minXP;
-    }
+    const ranks = PARENT_RANKS;
+    const chosenRank = ranks.find(rank => rank.level === rankLevel) || ranks[0];
+    if (!this.state.profiles[profileKey]) this.state.profiles[profileKey] = {};
+    const profile = this.state.profiles[profileKey];
+    profile.name = name;
+    profile.role = 'parent';
+    profile.rankLevel = rankLevel;
+    profile.avatar = '👨‍🍳';
+    if (profile.xp < chosenRank.minXP) profile.xp = chosenRank.minXP;
     this.state.onboarded = true;
-
     this.saveState();
     this.closeProfileModal();
     this.renderHeader();
@@ -4719,8 +4571,9 @@ class FusionApp {
     document.documentElement.setAttribute('data-theme', theme);
     const themeBtn = document.getElementById('theme-toggle-btn');
     if (themeBtn) {
-      themeBtn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
-      themeBtn.setAttribute('title', theme === 'dark' ? 'Switch to Light-Blue Mode' : 'Switch to Obsidian Black Mode');
+      themeBtn.innerHTML = theme === 'dark' ? '<span aria-hidden="true">☀️</span><span>Switch to light</span>' : '<span aria-hidden="true">🌙</span><span>Switch to dark</span>';
+      themeBtn.setAttribute('title', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+      themeBtn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
     }
     this.saveState();
   }
@@ -4737,8 +4590,9 @@ class FusionApp {
     sound.playClick();
     const soundBtn = document.getElementById('sound-toggle-btn');
     if (soundBtn) {
-      soundBtn.innerHTML = muted ? '🔇' : '🔊';
-      soundBtn.setAttribute('title', muted ? 'Unmute Sound Effects' : 'Mute Sound Effects');
+      soundBtn.innerHTML = muted ? '<span aria-hidden="true">🔇</span><span>Sound off</span>' : '<span aria-hidden="true">🔊</span><span>Sound on</span>';
+      soundBtn.setAttribute('title', muted ? 'Turn sound on' : 'Turn sound off');
+      soundBtn.setAttribute('aria-label', muted ? 'Turn sound on' : 'Turn sound off');
     }
     showToast(muted ? 'Sound Effects Muted 🔇' : 'Sound Effects Enabled 🔊', 'info');
   }
@@ -4758,7 +4612,7 @@ class FusionApp {
 
     const soundBtn = document.getElementById('sound-toggle-btn');
     if (soundBtn) {
-      soundBtn.innerHTML = sound.isMuted() ? '🔇' : '🔊';
+      soundBtn.innerHTML = sound.isMuted() ? '<span aria-hidden="true">🔇</span><span>Sound off</span>' : '<span aria-hidden="true">🔊</span><span>Sound on</span>';
     }
   }
 
@@ -4781,7 +4635,7 @@ class FusionApp {
         <div class="progress-info">
           <h4>
             <span>${rank.title}</span>
-            <span style="font-size:0.85rem; font-weight:normal; color:var(--text-muted);">(Level ${rank.level} • ${profile.role === 'parent' ? 'Parent Guide' : 'Student Chef'})</span>
+            <span style="font-size:0.85rem; font-weight:normal; color:var(--text-muted);">(Level ${rank.level} • ${profile.role === 'parent' ? 'Adult Chef' : 'Adult Chef'})</span>
             <span class="pill-badge" style="margin-left:auto;">${profile.xp} XP</span>
           </h4>
           <div class="progress-bar-track">
@@ -4811,7 +4665,6 @@ class FusionApp {
       { id: 'buildDish', name: 'Build-a-Dish', icon: 'plate', desc: 'Pantry Rush & Recipe Simulation', activeDesc: 'Timed hunt + step sequence' },
       { id: 'pronunciation', name: 'Pronounce Lab', icon: 'audio', desc: 'Phonetic Matching & Voice Check', activeDesc: 'Listen, reorder & speak' },
       { id: 'trivia', name: 'Family Trivia', icon: 'brain', desc: '10 Qs with Soft Timer & Hints', activeDesc: 'Food science & origins' },
-      { id: 'indiaMap', name: 'India Fusion Map', icon: 'map', desc: 'Metro Quests & Bazaar Markets', activeDesc: 'City quests & ingredients' },
       { id: 'hotPotato', name: 'Hot Potato Rush', icon: 'potato', desc: 'Whack, Cook in Coals & Serve Golden', activeDesc: '60-second round' },
       { id: 'spinScience', name: 'Science Wheel', icon: 'science', desc: 'Food Chemistry Explanations', activeDesc: 'Spin & discover reactions' }
     ];
@@ -4986,7 +4839,7 @@ class FusionApp {
                 Collected: ${completedCount} / ${correctItems.length}
               </span>
             </h4>
-            <p>Tap the authentic vegetarian ingredients! Beware of non-veg or clashing impostors (${diff.role === 'student' ? 'Kid-safe simple choices' : 'Pro chef tricky distractors'}).</p>
+            <p>Tap the authentic vegetarian ingredients! Beware of non-veg or clashing impostors (${diff.role === 'student' ? 'balanced recipe choices' : 'culinary distractors'}).</p>
             
             <div class="pantry-items-grid">
               ${displayPantryItems.map((item) => {
@@ -5024,7 +4877,7 @@ class FusionApp {
                       <div>
                         <strong>${step.title}</strong>
                         <div style="font-size:0.82rem; color:var(--text-muted); margin-top:2px;">${step.text}</div>
-                        ${step.kidSafe ? '<span class="pill-badge" style="font-size:0.7rem; color:var(--accent-green); background:var(--accent-green-light); margin-top:4px; display:inline-block;">👶 Kid-Friendly Step</span>' : '<span class="pill-badge" style="font-size:0.7rem; color:var(--secondary); background:var(--secondary-light); margin-top:4px; display:inline-block;">👨‍🍳 Parent Supervision</span>'}
+                        ${step.kidSafe ? '<span class="pill-badge" style="font-size:0.7rem; color:var(--accent-green); background:var(--accent-green-light); margin-top:4px; display:inline-block;">✓ Technique</span>' : '<span class="pill-badge" style="font-size:0.7rem; color:var(--secondary); background:var(--secondary-light); margin-top:4px; display:inline-block;">◆ Chef Technique</span>'}
                       </div>
                     </div>
                   `;
@@ -6607,7 +6460,7 @@ class FusionApp {
     const diff = this.getDifficultySettings();
     const diffBadge = document.getElementById('hp-modal-diff-badge');
     if (diffBadge) {
-      diffBadge.innerText = diff.role === 'student' ? '🎒 Kid Chef Mode' : '👨‍🍳 Pro Parent Mode';
+      diffBadge.innerText = diff.role === 'student' ? '🎒 Adult Chef Mode' : '👨‍🍳 Adult Chef Mode';
     }
 
     const canvas = document.getElementById('hp-fullscreen-canvas');
@@ -7913,7 +7766,7 @@ class FusionApp {
             <!-- Welcome Bubble -->
             <div class="chat-bubble ai">
               <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.25rem; font-weight:800; font-size:0.78rem; color:var(--primary);">
-                <span>👩‍🍳 Sous-Chef Maya</span>
+                <span>👩‍🍳 Kitchen Assistant</span>
               </div>
               Namaste! I'm your AI Sous-Chef for <strong>${dish.name}</strong>. How can I assist your kitchen adventure today?
             </div>
@@ -8114,7 +7967,7 @@ class FusionApp {
     typingBubble.id = 'ai-typing-indicator';
     typingBubble.innerHTML = `
       <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.25rem; font-weight:800; font-size:0.78rem; color:var(--primary);">
-        <span>👩‍🍳 Sous-Chef Maya</span>
+        <span>👩‍🍳 Kitchen Assistant</span>
       </div>
       <div class="typing-dots">
         <span></span><span></span><span></span>
@@ -8127,7 +7980,7 @@ class FusionApp {
     const workersKey = this.getWorkersAiKey();
     const workersAccount = this.getWorkersAiAccount();
 
-    const systemPrompt = `You are Chef Maya, an expert vegetarian AI Sous-Chef for Fusion Food Family Lab. 
+    const systemPrompt = `You are the Fusion Food Lab culinary assistant, an expert vegetarian cooking guide. 
 Helping a parent and kid (ages 10-16) cook "${dish.name}" (${dish.origin}).
 Recipe Description: ${dish.description}.
 Key Substitutes: ${dish.indianSubstitutes.map(s => `${s.substitute} replacing ${s.original} (${s.why})`).join('; ')}.
@@ -8270,7 +8123,7 @@ Guidelines:
 
     bubble.innerHTML = `
       <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.25rem; font-weight:800; font-size:0.78rem; color:var(--primary);">
-        <span>👩‍🍳 Sous-Chef Maya</span>
+        <span>👩‍🍳 Kitchen Assistant</span>
       </div>
       <div>${formatted}</div>
     `;
@@ -8352,7 +8205,7 @@ Guidelines:
         </div>`
       : '';
 
-    rosterContainer.innerHTML = noticeHtml + Object.entries(this.state.profiles)
+    rosterContainer.innerHTML = noticeHtml + Object.entries(this.state.profiles).filter(([key]) => key !== 'kid')
       .sort(([,a],[,b]) => {
         const aRank = this.getCurrentRank(a.xp, a.role);
         const bRank = this.getCurrentRank(b.xp, b.role);
@@ -8430,7 +8283,7 @@ Guidelines:
                 <span style="font-size:2.2rem;">${p.avatar}</span>
                 <div>
                   <strong style="font-size:1.05rem;">${this.escapeHtml(p.name)}</strong>
-                  <div style="font-size:0.82rem; color:var(--text-muted);">👑 Level ${pRank.level} — ${pRank.title} • ${p.role === 'parent' ? 'Parent Guide' : 'Student Chef'}</div>
+                  <div style="font-size:0.82rem; color:var(--text-muted);">👑 Level ${pRank.level} — ${pRank.title} • ${p.role === 'parent' ? 'Adult Chef' : 'Adult Chef'}</div>
                 </div>
               </div>
               <div style="text-align:right; margin-right:2rem;">
@@ -8540,7 +8393,7 @@ Guidelines:
                     <span>•</span>
                     <span>👑 Level ${p.level || 1}</span>
                     <span>•</span>
-                    <span>${p.role === 'parent' ? '👨‍🍳 Parent Guide' : '🎒 Student Chef'}</span>
+                    <span>${p.role === 'parent' ? '👨‍🍳 Adult Chef' : '🎒 Adult Chef'}</span>
                   </div>
                 </div>
               </div>
@@ -8626,7 +8479,7 @@ Guidelines:
                           <span>•</span>
                           <span>👑 Level ${p.level || 1}</span>
                           <span>•</span>
-                          <span>${p.role === 'parent' ? '👨‍🍳 Parent Guide' : '🎒 Student Chef'}</span>
+                          <span>${p.role === 'parent' ? '👨‍🍳 Adult Chef' : '🎒 Adult Chef'}</span>
                         </div>
                       </div>
                     </div>
@@ -8837,13 +8690,6 @@ Guidelines:
               </label>
             </div>
             <div class="toggle-row">
-              <span id="lbl-toggle-indiaMap">🗺️ India Fusion Map & City Quests</span>
-              <label class="switch">
-                <input type="checkbox" id="toggle-indiaMap" aria-labelledby="lbl-toggle-indiaMap" ${this.state.gameToggles.indiaMap !== false ? 'checked' : ''} />
-                <span class="slider" aria-hidden="true"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
               <span id="lbl-toggle-hotPotato">🥔 Hot Potato Rush (Arcade Cooking)</span>
               <label class="switch">
                 <input type="checkbox" id="toggle-hotPotato" aria-labelledby="lbl-toggle-hotPotato" ${this.state.gameToggles.hotPotato !== false ? 'checked' : ''} />
@@ -8862,13 +8708,6 @@ Guidelines:
           <!-- Granular Feature Sub-Toggles -->
           <h4 style="font-size:0.9rem; margin:0 0 0.5rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Granular Modular Sub-Toggles</h4>
           <div class="admin-toggles-list" style="margin-bottom:1.25rem;">
-            <div class="toggle-row">
-              <span id="lbl-toggle-v2-header-lb">🏆 Header Leaderboard Pill</span>
-              <label class="switch">
-                <input type="checkbox" id="toggle-v2-header-lb" aria-labelledby="lbl-toggle-v2-header-lb" ${v2.leaderboardInHeader !== false ? 'checked' : ''} />
-                <span class="slider" aria-hidden="true"></span>
-              </label>
-            </div>
             <div class="toggle-row">
               <span id="lbl-toggle-v2-fusion-tab">🌍 Fusion Explorer Tab</span>
               <label class="switch">
@@ -9258,12 +9097,11 @@ Guidelines:
           this.state.gameToggles.buildDish = document.getElementById('toggle-buildDish')?.checked ?? true;
           this.state.gameToggles.pronunciation = document.getElementById('toggle-pronunciation')?.checked ?? true;
           this.state.gameToggles.trivia = document.getElementById('toggle-trivia')?.checked ?? true;
-          this.state.gameToggles.indiaMap = document.getElementById('toggle-indiaMap')?.checked ?? true;
+          this.state.gameToggles.indiaMap = false;
           this.state.gameToggles.hotPotato = document.getElementById('toggle-hotPotato')?.checked ?? true;
           this.state.gameToggles.spinScience = document.getElementById('toggle-spinScience')?.checked ?? true;
 
           if (!this.state.v2Features) this.state.v2Features = {};
-          this.state.v2Features.leaderboardInHeader = document.getElementById('toggle-v2-header-lb')?.checked ?? true;
           this.state.v2Features.fusionExplorerTab = document.getElementById('toggle-v2-fusion-tab')?.checked ?? true;
           this.state.v2Features.tandoorSkewerGame = document.getElementById('toggle-v2-skewer')?.checked ?? true;
           this.state.v2Features.chefHatCameraFilter = document.getElementById('toggle-v2-camera')?.checked ?? true;
@@ -11726,13 +11564,6 @@ Guidelines:
   applyV2FeatureVisibility() {
     const v2 = this.state.v2Features || {};
     const ver = this.state.appVersion || 'v2';
-
-    // 1. Header Leaderboard Pill
-    const headerLb = document.getElementById('header-leaderboard-pill');
-    if (headerLb) {
-      const showLb = ver !== 'v1' && v2.leaderboardInHeader !== false;
-      headerLb.style.display = showLb ? 'inline-flex' : 'none';
-    }
 
     // 2. Fusion Explorer Navigation Tab & Pane
     const fusionTabBtn = document.getElementById('tab-btn-fusion');
