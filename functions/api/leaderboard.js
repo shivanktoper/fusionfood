@@ -1,4 +1,5 @@
 // Cloudflare Pages Function: /api/leaderboard
+import { authorizeApiRequest } from './_api-auth.js';
 // Handles GET (Read leaderboard rankings) and POST (Write/Upsert leaderboard entry)
 
 function jsonResponse(data, status = 200) {
@@ -14,6 +15,8 @@ const VALID_FILTERS = new Set(['all', 'overall', 'hotPotato', 'buildDish', 'triv
 // 1. READ ACCESS (GET /api/leaderboard)
 // ====================================================================
 export async function onRequestGet(context) {
+  const access = await authorizeApiRequest(context, 'read');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
@@ -108,6 +111,8 @@ export async function onRequestGet(context) {
 // 2. WRITE ACCESS (POST /api/leaderboard)
 // ====================================================================
 export async function onRequestPost(context) {
+  const access = await authorizeApiRequest(context, 'write');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
