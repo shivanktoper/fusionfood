@@ -4120,6 +4120,11 @@ class FusionApp {
 
   loadState() {
     try {
+      try {
+        localStorage.removeItem('fusion_gemini_api_key');
+        localStorage.removeItem('fusion_workers_ai_token');
+        localStorage.removeItem('fusion_workers_ai_account');
+      } catch (storageError) {}
       const saved = localStorage.getItem('fusion_app_state');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -4164,7 +4169,7 @@ class FusionApp {
           parsed.profiles.parent.role = 'parent';
           if (!parsed.profiles.parent.name || parsed.profiles.parent.name === 'Chef Priya') parsed.profiles.parent.name = 'Chef';
           parsed.profiles.parent.avatar = '👨‍🍳';
-          parsed.profiles.parent.unlockedBadges = (parsed.profiles.parent.unlockedBadges || []).filter(b => !String(b).includes('Kitchen Apprentice'));
+          parsed.profiles.parent.unlockedBadges = (parsed.profiles.parent.unlockedBadges || []).filter(b => !String(b).includes('Kitchen Apprentice') && !String(b).includes('Sous-Chef Guide'));
         }
         return { 
           ...DEFAULT_STATE, 
@@ -4264,13 +4269,9 @@ class FusionApp {
     // 3. Reset in-memory state to clean pristine defaults
     this.state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     this.state.onboarded = false;
-    this.state.profiles.kid.xp = 0;
     this.state.profiles.parent.xp = 0;
-    this.state.profiles.kid.streak = 1;
     this.state.profiles.parent.streak = 1;
-    this.state.profiles.kid.bests = { hotPotato: 0, trivia: 0, buildDish: 0, pronunciation: 0, scienceSpins: 0 };
     this.state.profiles.parent.bests = { hotPotato: 0, trivia: 0, buildDish: 0, pronunciation: 0, scienceSpins: 0 };
-    this.state.profiles.kid.unlockedBadges = ['🌱 Junior Taster'];
     this.state.profiles.parent.unlockedBadges = ['🔥 Tandoor Specialist'];
     this.state.completedCityQuests = [];
     this.state.recipeCompletedSteps = {};
@@ -5137,7 +5138,7 @@ class FusionApp {
   }
 
   speakText(text) {
-    const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D', elevenLabsKey: '' };
+    const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D' };
     
     // The provider credential remains server-side in Cloudflare secrets.
     if (tts.provider === 'elevenlabs' && typeof window !== 'undefined' &&
@@ -5166,9 +5167,6 @@ class FusionApp {
     }
 
     this.fallbackSpeakText(text, tts.voiceId);
-  }
-
-  fallbackSpeakText    this.fallbackSpeakText(text, tts.voiceId);
   }
 
   fallbackSpeakText(text, voicePref = 'en-IN-Wavenet-D') {
@@ -8934,9 +8932,7 @@ Guidelines:
         document.getElementById('reset-scores-btn')?.addEventListener('click', () => {
           if (confirm('Are you sure you want to reset all family scores, streaks, and XP back to apprentice level?')) {
             sound.playWrong();
-            this.state.profiles.kid.xp = 0;
             this.state.profiles.parent.xp = 0;
-            this.state.profiles.kid.streak = 1;
             this.state.profiles.parent.streak = 1;
             this.saveState();
             this.renderProgressStrip();
