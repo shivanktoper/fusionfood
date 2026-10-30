@@ -53,7 +53,9 @@ export function getCorsHeaders(request, env = {}) {
   };
 
   const origin = request.headers.get("Origin");
-  if (origin && isAllowedOrigin(origin, env)) {
+  const requestedHeaders = request.headers.get("Access-Control-Request-Headers") || "";
+  const hasBearerAuthorization = /^Bearer\\s+ff_live_[A-Za-z0-9_-]+$/i.test(request.headers.get("Authorization") || "") || /(^|,|\\s)authorization(,|$|\\s)/i.test(requestedHeaders);
+  if (origin && (isAllowedOrigin(origin, env) || hasBearerAuthorization)) {
     headers["Access-Control-Allow-Origin"] = origin;
   }
 
