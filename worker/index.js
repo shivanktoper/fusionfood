@@ -8,6 +8,8 @@ import * as adminKeysHandler from "../functions/api/admin/keys.js";
 import * as adminSessionHandler from "../functions/api/admin/session.js";
 import * as configHandler from "../functions/api/config.js";
 import * as adminConfigHandler from "../functions/api/admin/config.js";
+import * as assistantHandler from "../functions/api/assistant.js";
+import * as voiceHandler from "../functions/api/voice.js";
 import { getCorsHeaders } from "../functions/api/_middleware.js";
 
 function jsonResponse(data, status = 200, extraHeaders = {}) {
@@ -62,6 +64,14 @@ export default {
         if (request.method === "GET") response = await feedbackHandler.onRequestGet(context);
         else if (request.method === "POST") response = await feedbackHandler.onRequestPost(context);
         else response = jsonResponse({ success: false, error: "Method Not Allowed" }, 405);
+      } else if (pathname === "/api/assistant") {
+        if (request.method === "GET") response = await assistantHandler.onRequestGet(context);
+        else if (request.method === "POST") response = await assistantHandler.onRequestPost(context);
+        else response = jsonResponse({ success: false, error: "Method Not Allowed" }, 405);
+      } else if (pathname === "/api/voice") {
+        response = request.method === "POST"
+          ? await voiceHandler.onRequestPost(context)
+          : jsonResponse({ success: false, error: "Method Not Allowed" }, 405);
       } else if (pathname === "/api/config") {
         response = request.method === "GET"
           ? await configHandler.onRequestGet(context)
