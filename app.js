@@ -4156,7 +4156,7 @@ class FusionApp {
           parsed.profiles.parent.role = 'parent';
           if (!parsed.profiles.parent.name || parsed.profiles.parent.name === 'Chef Priya') parsed.profiles.parent.name = 'Chef';
           parsed.profiles.parent.avatar = '👨‍🍳';
-          parsed.profiles.parent.unlockedBadges = (parsed.profiles.parent.unlockedBadges || []).filter(b => !String(b).includes('Sous-Chef Guide'));
+          parsed.profiles.parent.unlockedBadges = (parsed.profiles.parent.unlockedBadges || []).filter(b => !String(b).includes('Kitchen Apprentice'));
         }
         return { 
           ...DEFAULT_STATE, 
@@ -4839,7 +4839,7 @@ class FusionApp {
                 Collected: ${completedCount} / ${correctItems.length}
               </span>
             </h4>
-            <p>Tap the authentic vegetarian ingredients! Beware of non-veg or clashing impostors (${diff.role === 'student' ? 'balanced recipe choices' : 'culinary distractors'}).</p>
+            <p>Select the authentic vegetarian ingredients. Distractors test your culinary judgement.</p>
             
             <div class="pantry-items-grid">
               ${displayPantryItems.map((item) => {
@@ -4872,12 +4872,12 @@ class FusionApp {
                 ${dish.recipeSteps.map((step, sIdx) => {
                   const stepDone = completedCount >= (sIdx + 1) * Math.ceil(correctItems.length / dish.recipeSteps.length);
                   return `
-                    <div class="step-card ${stepDone || isFinished ? 'completed' : ''}" style="${diff.role === 'student' && step.kidSafe ? 'border-left: 4px solid var(--accent-green);' : ''}">
+                    <div class="step-card ${stepDone || isFinished ? 'completed' : ''}" >
                       <div class="step-number">${sIdx + 1}</div>
                       <div>
                         <strong>${step.title}</strong>
                         <div style="font-size:0.82rem; color:var(--text-muted); margin-top:2px;">${step.text}</div>
-                        ${step.kidSafe ? '<span class="pill-badge" style="font-size:0.7rem; color:var(--accent-green); background:var(--accent-green-light); margin-top:4px; display:inline-block;">✓ Technique</span>' : '<span class="pill-badge" style="font-size:0.7rem; color:var(--secondary); background:var(--secondary-light); margin-top:4px; display:inline-block;">◆ Chef Technique</span>'}
+                        <span class="pill-badge" style="font-size:0.7rem; color:var(--secondary); background:var(--secondary-light); margin-top:4px; display:inline-block;">Chef Technique</span>
                       </div>
                     </div>
                   `;
@@ -6459,9 +6459,7 @@ class FusionApp {
 
     const diff = this.getDifficultySettings();
     const diffBadge = document.getElementById('hp-modal-diff-badge');
-    if (diffBadge) {
-      diffBadge.innerText = diff.role === 'student' ? '🎒 Adult Chef Mode' : '👨‍🍳 Adult Chef Mode';
-    }
+    if (diffBadge) diffBadge.innerText = '👨‍🍳 Adult Chef';
 
     const canvas = document.getElementById('hp-fullscreen-canvas');
     if (!canvas) return;
@@ -7715,7 +7713,7 @@ class FusionApp {
                       </div>
                       <div class="step-header-actions">
                         ${s.kidSafe 
-                          ? '<span class="pill-badge" style="background:var(--tag-veg-bg); color:var(--accent-green); border-color:var(--tag-veg-border); font-size:0.75rem;">👶 Kid-Friendly</span>'
+                          ? '<span class="pill-badge" style="background:var(--tag-veg-bg); color:var(--accent-green); border-color:var(--tag-veg-border); font-size:0.75rem;">👶 Guided</span>'
                           : '<span class="pill-badge" style="background:#fff1f2; color:#e11d48; border-color:#fecdd3; font-size:0.75rem;">🔥 Parent Assistance</span>'
                         }
                         <button class="step-checkbox-btn ${isDone ? 'checked' : ''}" data-step="${s.step}">
@@ -7774,7 +7772,7 @@ class FusionApp {
 
           <!-- Quick Suggestions Chips -->
           <div class="chat-chip-suggestions" id="chat-chip-suggestions">
-            <button class="chat-chip" data-prompt="How can I make ${dish.name} less spicy and super kid-friendly?">🌶️ Kid-Friendly Spice</button>
+            <button class="chat-chip" data-prompt="How can I make ${dish.name} less spicy and super guided?">🌶️ Guided Spice</button>
             <button class="chat-chip" data-prompt="What if I don't have the primary desi substitute, what can I use?">🥫 Missing Substitutes</button>
             <button class="chat-chip" data-prompt="Can I prepare this in advance for a family party?">⏱️ Prep Shortcuts</button>
             <button class="chat-chip" data-prompt="Explain the food science of ${dish.name} so I can teach my kids!">🧪 Science for Kids</button>
@@ -8137,7 +8135,7 @@ Guidelines:
     let advice = '';
 
     if (lower.includes('spice') || lower.includes('kid') || lower.includes('mild')) {
-      advice = `To make **${dish.name}** extra kid-friendly:\n` +
+      advice = `To make **${dish.name}** extra guided:\n` +
         `• Halve any fresh green chilies or use sweet yellow bell pepper instead.\n` +
         `• Add a teaspoon of honey or a dollop of fresh cream / hung curd to balance the spice.\n` +
         `• Keep raw garnishes like fresh coriander on the side so kids can add their own!`;
@@ -8927,7 +8925,7 @@ Guidelines:
               <select id="tts-voice-select" style="width:100%; padding:0.45rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-main); font-size:0.88rem;">
                 <option value="en-IN-Wavenet-D" ${tts.voiceId === 'en-IN-Wavenet-D' ? 'selected' : ''}>🇮🇳 Indian English (Professional Chef — Wavenet-D)</option>
                 <option value="hi-IN-Swara" ${tts.voiceId === 'hi-IN-Swara' ? 'selected' : ''}>🇮🇳 Hindi / Hinglish (Warm Desi Rasoi — Swara)</option>
-                <option value="en-IN-Standard-B" ${tts.voiceId === 'en-IN-Standard-B' ? 'selected' : ''}>🇮🇳 Indian English (Kid Friendly Guide — Standard-B)</option>
+                <option value="en-IN-Standard-B" ${tts.voiceId === 'en-IN-Standard-B' ? 'selected' : ''}>🇮🇳 Indian English (Clear Guide Voice — Standard-B)</option>
               </select>
             </div>
 
@@ -9552,10 +9550,6 @@ Guidelines:
     document.getElementById('profile-modal')?.addEventListener('click', (e) => {
       if (e.target.id === 'profile-modal') this.closeProfileModal();
     });
-    document.getElementById('close-leaderboard-modal-btn')?.addEventListener('click', () => this.closeLeaderboardModal());
-    document.getElementById('leaderboard-modal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'leaderboard-modal') this.closeLeaderboardModal();
-    });
 
     // M-10: Mobile keyboard handling - scroll inputs into view on virtual keyboard appearance
     document.addEventListener('focusin', (e) => {
@@ -9606,15 +9600,7 @@ Guidelines:
       });
     });
 
-    // Header Actions: Camera, Portfolio, and Leaderboard
-    document.getElementById('header-leaderboard-pill')?.addEventListener('click', () => {
-      sound.playClick();
-      this.openLeaderboardModal();
-    });
-    document.getElementById('close-leaderboard-modal-btn')?.addEventListener('click', () => this.closeLeaderboardModal());
-    document.getElementById('leaderboard-modal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'leaderboard-modal') this.closeLeaderboardModal();
-    });
+    // Header actions: camera and portfolio.
     document.getElementById('open-camera-scanner-btn')?.addEventListener('click', () => this.openCameraScannerModal());
     document.getElementById('close-camera-modal-btn')?.addEventListener('click', () => this.closeCameraScannerModal());
     document.getElementById('camera-scanner-modal')?.addEventListener('click', (e) => {
