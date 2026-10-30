@@ -4791,9 +4791,6 @@ class FusionApp {
       case 'trivia':
         this.renderTriviaGame(arena);
         break;
-      case 'indiaMap':
-        this.renderIndiaMapGame(arena);
-        break;
       case 'hotPotato':
         this.renderHotPotatoGame(arena);
         break;
@@ -5447,296 +5444,6 @@ class FusionApp {
     }, 1000);
   }
 
-
-  // ========================================================
-  // GAME 4: INDIA AVAILABILITY MAP & CITY QUEST
-  // ========================================================
-  renderIndiaMapGame(arena) {
-    if (!this.selectedMetro) {
-      this.selectedMetro = INDIA_METROS_DATA[0];
-    }
-    const metro = this.selectedMetro;
-    const isQuestDone = this.state.completedCityQuests && this.state.completedCityQuests.includes(metro.id);
-
-    arena.innerHTML = `
-      <div class="arena-header">
-        <div class="arena-title-group">
-          <span class="arena-icon">🗺️</span>
-          <div>
-            <h3>India Culinary Availability Map & City Quest</h3>
-            <p style="font-size:0.85rem; color:var(--text-muted);">Explore regional fusion adoption & local Indian ingredient bazaars</p>
-          </div>
-        </div>
-        <div class="arena-badges" style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-          <button class="btn btn-secondary" id="toggle-map-tut-btn" style="padding:0.35rem 0.85rem; font-size:0.8rem; border-color:var(--primary); color:var(--primary);">
-            💡 ${this.showMapTutorial ? 'Hide Tutorial' : 'How to Play Tutorial'}
-          </button>
-          <span class="pill-badge" style="color:var(--primary); font-weight:800;">7 Metro Hubs</span>
-          <span class="pill-badge">Bazaar Substitutes</span>
-        </div>
-      </div>
-
-      ${this.showMapTutorial ? `
-        <div class="map-tutorial-banner" id="map-tutorial-box">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">
-            <h4 style="font-size:1.05rem; display:flex; align-items:center; gap:0.5rem;">
-              <span>🧭</span> <span>How to Play India City Quest:</span>
-            </h4>
-            <button class="btn btn-secondary" id="close-map-tut-btn" style="padding:0.25rem 0.65rem; font-size:0.75rem;">Dismiss ✕</button>
-          </div>
-          <div class="tutorial-steps-grid">
-            <div class="tutorial-step-card">
-              <div class="tut-num">1</div>
-              <div>
-                <strong>Tap City Pins 📍</strong>
-                <p>Click any pulsating metro pin on India's map (Mumbai, Delhi-NCR, Bengaluru, Goa, Pune, Hyderabad, Kolkata).</p>
-              </div>
-            </div>
-            <div class="tutorial-step-card">
-              <div class="tut-num">2</div>
-              <div>
-                <strong>Scout Local Bazaars 🛒</strong>
-                <p>Discover authentic desi ingredient markets (Crawford Market, INA Bazaar, Begum Bazaar) for fusion cooking.</p>
-              </div>
-            </div>
-            <div class="tutorial-step-card">
-              <div class="tut-num">3</div>
-              <div>
-                <strong>Compare Dish Trends 📊</strong>
-                <p>Check the availability level for Nikkei Ceviche, Butter Paneer Tacos, Naanza, and Spiced Ramen in that city.</p>
-              </div>
-            </div>
-            <div class="tutorial-step-card">
-              <div class="tut-num">4</div>
-              <div>
-                <strong>Earn Explorer XP 🌟</strong>
-                <p>Hit "Complete City Quest" to earn +20 XP toward leveling up your Master Chef rank on the Leaderboard!</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      ` : ''}
-
-      <div class="map-quest-layout">
-        <!-- Interactive Authentic SVG Map of India -->
-        <div class="india-svg-card">
-          <h4 style="margin-bottom:0.35rem; font-size:1.15rem;">Interactive Map: Tap Any Metro Hub</h4>
-          <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:1.25rem;">Click glowing markers to discover regional fusion trends</p>
-
-          <div class="svg-map-wrapper">
-            <svg viewBox="0 0 540 640" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="indiaMapGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="var(--bg-card-subtle)" stop-opacity="0.95" />
-                  <stop offset="100%" stop-color="var(--bg-card)" stop-opacity="0.98" />
-                </linearGradient>
-              </defs>
-
-              <!-- Detailed Realistic Mainland India Outline -->
-              <path class="india-mainland" d="
-                M 242 38
-                C 255 30, 275 28, 290 35
-                C 305 42, 318 55, 326 72
-                C 334 88, 330 108, 322 120
-                C 316 130, 312 142, 318 152
-                C 324 162, 338 170, 344 185
-                C 350 200, 346 212, 358 220
-                C 375 228, 405 238, 424 246
-                C 434 248, 440 238, 446 226
-                C 450 220, 458 222, 460 234
-                C 464 245, 478 244, 486 238
-                C 498 228, 516 212, 532 210
-                C 546 210, 554 224, 548 242
-                C 542 258, 528 276, 530 295
-                C 532 312, 538 332, 528 350
-                C 520 360, 508 358, 504 342
-                C 498 325, 485 312, 470 312
-                C 450 312, 438 324, 425 338
-                C 414 350, 402 372, 390 395
-                C 380 415, 364 438, 352 465
-                C 340 492, 322 528, 312 558
-                C 302 585, 292 612, 275 632
-                C 270 638, 260 640, 256 632
-                C 250 620, 245 598, 238 578
-                C 230 558, 220 532, 215 508
-                C 210 482, 206 456, 198 432
-                C 192 408, 180 388, 168 378
-                C 156 368, 138 372, 124 362
-                C 108 352, 105 334, 118 322
-                C 130 310, 150 314, 158 296
-                C 164 282, 150 270, 134 264
-                C 118 256, 122 242, 134 234
-                C 148 226, 164 220, 172 202
-                C 178 184, 184 160, 196 140
-                C 206 122, 216 98, 218 78
-                C 222 58, 228 42, 242 38
-                Z"
-                fill="url(#indiaMapGrad)"
-                stroke="var(--border-color)"
-                stroke-width="3"
-                stroke-linejoin="round"
-              />
-
-              <!-- Tropic of Cancer Reference Line -->
-              <path d="M 115 330 Q 270 340 475 320" stroke="var(--border-dashed)" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.45" />
-
-              <!-- Culinary Fusion Trade Routes (Corridors connecting hubs) -->
-              <line x1="236" y1="195" x2="194" y2="412" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-              <line x1="194" y1="412" x2="224" y2="428" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-              <line x1="224" y1="428" x2="216" y2="492" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-              <line x1="216" y1="492" x2="262" y2="552" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-              <line x1="194" y1="412" x2="292" y2="450" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-              <line x1="292" y1="450" x2="262" y2="552" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-              <line x1="236" y1="195" x2="416" y2="338" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-              <line x1="416" y1="338" x2="292" y2="450" stroke="var(--border-dashed)" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.6" />
-
-              <!-- Andaman & Nicobar Islands -->
-              <ellipse cx="488" cy="510" rx="3.5" ry="12" fill="url(#indiaMapGrad)" stroke="var(--border-color)" stroke-width="1.5" />
-              <ellipse cx="496" cy="542" rx="3" ry="10" fill="url(#indiaMapGrad)" stroke="var(--border-color)" stroke-width="1.5" />
-
-              <!-- Lakshadweep Islands -->
-              <circle cx="162" cy="540" r="3" fill="url(#indiaMapGrad)" stroke="var(--border-color)" stroke-width="1.5" />
-              <circle cx="158" cy="554" r="2.5" fill="url(#indiaMapGrad)" stroke="var(--border-color)" stroke-width="1.5" />
-              <circle cx="164" cy="566" r="3" fill="url(#indiaMapGrad)" stroke="var(--border-color)" stroke-width="1.5" />
-
-              <!-- Interactive Metro Pins -->
-              ${INDIA_METROS_DATA.map(m => {
-                const isSel = m.id === metro.id;
-                const isVisited = this.state.completedCityQuests && this.state.completedCityQuests.includes(m.id);
-                const pinColor = isSel ? 'var(--primary)' : (isVisited ? 'var(--accent-green)' : 'var(--secondary)');
-
-                return `
-                  <g class="metro-pin ${isSel ? 'selected' : ''}" data-metro-id="${m.id}" tabindex="0" role="button" aria-label="${m.name} Hub">
-                    <circle class="pin-halo" cx="${m.x}" cy="${m.y}" r="${isSel ? '18' : '12'}" fill="${pinColor}" opacity="${isSel ? '0.45' : '0.22'}" />
-                    <circle class="pin-core" cx="${m.x}" cy="${m.y}" r="${isSel ? '8' : '6'}" fill="${pinColor}" stroke="#FFFFFF" stroke-width="${isSel ? '2.5' : '1.5'}" />
-                    <text x="${m.x}" y="${m.y - 12}" text-anchor="middle" font-size="${isSel ? '13' : '11'}" font-weight="${isSel ? '900' : '700'}" fill="var(--text-main)">
-                      ${m.name} ${isVisited ? '✓' : ''}
-                    </text>
-                  </g>
-                `;
-              }).join('')}
-            </svg>
-          </div>
-
-          <div style="margin-top:1.25rem; font-size:0.84rem; color:var(--text-muted); display:flex; justify-content:center; gap:1.25rem; flex-wrap:wrap;">
-            <span>🟢 Green ✓: Quest Mastered</span>
-            <span>🔵 Blue: Active Hub</span>
-            <span>🟠 Orange: Unscouted</span>
-          </div>
-        </div>
-
-        <!-- Selected Metro Details & Quest Challenge -->
-        <div class="metro-details-card">
-          <div style="border-bottom:2px dashed var(--border-dashed); padding-bottom:1rem; margin-bottom:1.25rem;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.35rem;">
-              <span class="pill-badge" style="color:var(--primary); font-weight:800;">📍 ${metro.state}</span>
-              ${isQuestDone ? `
-                <span class="pill-badge" style="color:var(--accent-green); background:var(--accent-green-light); font-weight:800;">
-                  🌟 Quest Complete (+20 XP Earned)
-                </span>
-              ` : `
-                <span class="pill-badge" style="color:var(--secondary); background:var(--secondary-light);">
-                  ⏳ Incomplete Quest
-                </span>
-              `}
-            </div>
-            <h3 style="font-size:1.65rem; margin-top:0.25rem;">${metro.name}</h3>
-            <p style="font-weight:700; color:var(--secondary); font-size:0.95rem;">"${metro.tagline}"</p>
-          </div>
-
-          <!-- Famous Fusion Epicenters -->
-          <div style="margin-bottom:1.15rem;">
-            <h4 style="font-size:0.92rem; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:0.35rem;">
-              🍽️ Famous Food Hubs & Gastropubs
-            </h4>
-            <p style="font-size:0.92rem; font-weight:600;">${metro.famousHubs}</p>
-          </div>
-
-          <!-- Premier Desi Ingredient Sourcing Bazaar -->
-          <div style="background:var(--bg-card); border:1.5px solid var(--border-color); border-radius:var(--radius-md); padding:1rem 1.15rem; margin-bottom:1.25rem;">
-            <h4 style="font-size:0.92rem; color:var(--primary); margin-bottom:0.25rem; display:flex; align-items:center; gap:0.4rem;">
-              <span>🛒 Premier Sourcing Bazaar:</span>
-            </h4>
-            <p style="font-size:0.9rem; font-weight:700; color:var(--text-main); margin-bottom:0.35rem;">
-              ${metro.topMarket}
-            </p>
-            <div style="font-size:0.82rem; color:var(--text-muted); line-height:1.45;">
-              💡 <em>${metro.questTip}</em>
-            </div>
-          </div>
-
-          <!-- Dishes Available in this City -->
-          <div style="margin-bottom:1.5rem;">
-            <h4 style="font-size:0.92rem; text-transform:uppercase; color:var(--text-muted); letter-spacing:0.05em; margin-bottom:0.6rem;">
-              📊 Fusion Dish Availability Index
-            </h4>
-            <div style="display:flex; flex-direction:column; gap:0.5rem;">
-              ${metro.dishesAvailable.map(d => `
-                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-card); padding:0.55rem 0.85rem; border-radius:var(--radius-sm); border:1px solid var(--border-color); font-size:0.84rem;">
-                  <strong>${d.name}</strong>
-                  <span class="pill-badge" style="font-size:0.75rem;">${d.level}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-
-          <!-- Quest Action Button -->
-          ${isQuestDone ? `
-            <button class="btn btn-secondary" style="width:100%; padding:0.75rem; font-size:0.9rem;" disabled>
-              ✅ Quest Verified (+20 XP Recorded)
-            </button>
-          ` : `
-            <button class="btn btn-primary" id="claim-city-xp-btn" style="width:100%; padding:0.75rem; font-size:0.95rem; font-weight:800;">
-              ✨ Complete ${metro.name} Quest (+20 XP)
-            </button>
-          `}
-        </div>
-      </div>
-    `;
-
-    // Toggle Tutorial listener
-    arena.querySelector('#toggle-map-tut-btn')?.addEventListener('click', () => {
-      sound.playClick();
-      this.showMapTutorial = !this.showMapTutorial;
-      this.renderIndiaMapGame(arena);
-    });
-
-    arena.querySelector('#close-map-tut-btn')?.addEventListener('click', () => {
-      sound.playClick();
-      this.showMapTutorial = false;
-      this.renderIndiaMapGame(arena);
-    });
-
-    arena.querySelectorAll('.metro-pin').forEach(pin => {
-      pin.addEventListener('click', () => {
-        sound.playClick();
-        const id = pin.getAttribute('data-metro-id');
-        this.selectedMetro = INDIA_METROS_DATA.find(m => m.id === id) || INDIA_METROS_DATA[0];
-        this.renderIndiaMapGame(arena);
-      });
-      pin.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          pin.click();
-        }
-      });
-    });
-
-    arena.querySelector('#claim-city-xp-btn')?.addEventListener('click', () => {
-      sound.playFanfare();
-      launchConfetti();
-      if (!this.state.completedCityQuests) {
-        this.state.completedCityQuests = [];
-      }
-      if (!this.state.completedCityQuests.includes(metro.id)) {
-        this.state.completedCityQuests.push(metro.id);
-        this.saveState();
-      }
-      this.addXP(20, `🗺️ ${metro.name} Explorer`);
-      showToast(`Completed ${metro.name} Quest! +20 XP`, 'success');
-      this.renderIndiaMapGame(arena);
-    });
-  }
 
   // ========================================================
   // GAME 4: HOT POTATO RUSH (PROMPT POTATO ARCADE)
@@ -7759,7 +7466,7 @@ class FusionApp {
               <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.25rem; font-weight:800; font-size:0.78rem; color:var(--primary);">
                 <span>👩‍🍳 Kitchen Assistant</span>
               </div>
-              Namaste! I'm your AI Sous-Chef for <strong>${dish.name}</strong>. How can I assist your kitchen adventure today?
+              Namaste! I'm your kitchen assistant for <strong>${dish.name}</strong>. What would you like to explore?
             </div>
           </div>
 
@@ -7768,12 +7475,12 @@ class FusionApp {
             <button class="chat-chip" data-prompt="How can I make ${dish.name} less spicy and super guided?">🌶️ Guided Spice</button>
             <button class="chat-chip" data-prompt="What if I don't have the primary desi substitute, what can I use?">🥫 Missing Substitutes</button>
             <button class="chat-chip" data-prompt="Can I prepare this in advance for a family party?">⏱️ Prep Shortcuts</button>
-            <button class="chat-chip" data-prompt="Explain the food science of ${dish.name} so I can teach my kids!">🧪 Science for Kids</button>
+            <button class="chat-chip" data-prompt="Explain the food science behind ${dish.name} in simple terms.">🧪 Food Science</button>
           </div>
 
           <!-- Chat Input Bar -->
           <form class="chat-input-bar" id="recipe-chat-form">
-            <input type="text" id="recipe-chat-input" class="chat-input" placeholder="Ask Sous-Chef anything about this recipe..." aria-label="Ask AI Sous-Chef a question about this recipe" autocomplete="off">
+            <input type="text" id="recipe-chat-input" class="chat-input" placeholder="Ask about this recipe..." aria-label="Ask the kitchen assistant a question about this recipe" autocomplete="off">
             <button type="submit" class="chat-send-btn" id="recipe-chat-send-btn" title="Send Question" aria-label="Send Question to AI Sous-Chef">➤</button>
           </form>
         </div>
@@ -9521,7 +9228,6 @@ Guidelines:
         this.closePortfolioModal();
         this.closeTourModal();
         this.closeHotPotatoFullscreenModal();
-        this.closeLeaderboardModal();
         document.body.classList.remove('has-modal-open');
         if (this.lastFocusedElement && typeof this.lastFocusedElement.focus === 'function') {
           this.lastFocusedElement.focus();
@@ -12245,7 +11951,7 @@ Guidelines:
         author,
         rating,
         comment,
-        role: this.state.profiles.parent?.name ? 'Family Chef' : 'Kid Prodigy',
+        role: 'Adult Chef',
         date: new Date().toISOString().split('T')[0]
       };
 
