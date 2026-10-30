@@ -1,6 +1,7 @@
 // Protected Cloudflare Pages Function: /api/admin/keys
 // Admin operations require a valid short-lived HttpOnly session.
 import { requireAdmin } from "./_auth.js";
+import { hashApiToken } from "../_api-auth.js";
 
 function jsonResponse(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -91,6 +92,7 @@ export async function onRequestPost(context) {
   }
 
   const token = `ff_live_${generateRandomHex(32)}`;
+  const tokenHash = await hashApiToken(token);
   const keyId = `key_${generateRandomHex(8)}`;
   const keyPrefix = `${token.slice(0, 12)}...${token.slice(-4)}`;
   let expiresAt = null;
@@ -105,7 +107,7 @@ export async function onRequestPost(context) {
     await db.prepare(`
       INSERT INTO api_keys (key_id, name, key_prefix, key_token, scope, status, expires_at)
       VALUES (?, ?, ?, ?, ?, 'active', ?)
-    `).bind(keyId, name, keyPrefix, token, scope, expiresAt).run();
+    `).bind(keyId, name, keyPrefix, tokenHash, scope, expiresAt).run();
     return jsonResponse({
       success: true,
       action: "created",
