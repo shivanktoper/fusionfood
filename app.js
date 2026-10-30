@@ -2367,7 +2367,6 @@ const DEFAULT_STATE = {
   ttsConfig: {
     provider: 'browser', // 'browser' or 'elevenlabs'
     voiceId: 'en-IN-Wavenet-D',
-    elevenLabsKey: ''
   },
   kidScoreVerifications: [],
   faceHashes: {},
@@ -4129,6 +4128,15 @@ class FusionApp {
           parsed.gameToggles.hotPotato = true;
         }
         if (parsed.gameToggles) parsed.gameToggles.indiaMap = false;
+        if (parsed.ttsConfig) {
+          delete parsed.ttsConfig.elevenLabsKey;
+          if (!['browser', 'elevenlabs'].includes(parsed.ttsConfig.provider)) parsed.ttsConfig.provider = 'browser';
+        }
+        try {
+          localStorage.removeItem('fusion_gemini_api_key');
+          localStorage.removeItem('fusion_workers_ai_token');
+          localStorage.removeItem('fusion_workers_ai_account');
+        } catch (storageError) {}
         delete parsed.adminPin;
         if (Array.isArray(parsed.apiKeys)) {
           parsed.apiKeys = parsed.apiKeys.filter(key => !['key_master_admin', 'key_public_ro'].includes(key.keyId) && !/^ff_live_(adm|ro)_/.test(key.token || ''));
@@ -4303,6 +4311,7 @@ class FusionApp {
     this.updateNavAccessibility();
     this.applyV2FeatureVisibility();
     this.loadGlobalAdminConfig().catch(() => {});
+    this.loadAiProviderStatus().catch(() => {});
   }
 
   // ========================================================
@@ -5130,35 +5139,36 @@ class FusionApp {
   speakText(text) {
     const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D', elevenLabsKey: '' };
     
-    // ElevenLabs Direct API router if enabled and key provided
-    if (tts.provider === 'elevenlabs' && tts.elevenLabsKey) {
-      fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+    // The provider credential remains server-side in Cloudflare secrets.
+    if (tts.provider === 'elevenlabs' && typeof window !== 'undefined' &&
+        window.location.protocol !== 'file:' && !isGitHubPagesStaticHost()) {
+      fetch('/api/voice', {
         method: 'POST',
-        headers: {
-          'Accept': 'audio/mpeg',
-          'Content-Type': 'application/json',
-          'xi-api-key': tts.elevenLabsKey
-        },
-        body: JSON.stringify({
-          text: text,
-          model_id: 'eleven_monolingual_v1',
-          voice_settings: { stability: 0.65, similarity_boost: 0.75 }
-        })
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+        body: JSON.stringify({ text })
       })
-      .then(res => res.blob())
+      .then(async response => {
+        if (!response.ok) throw new Error('Neural voice is unavailable.');
+        return response.blob();
+      })
       .then(blob => {
         const audioUrl = URL.createObjectURL(blob);
         const audio = new Audio(audioUrl);
-        audio.play().catch(() => {});
+        audio.addEventListener('ended', () => URL.revokeObjectURL(audioUrl), { once: true });
+        audio.play().catch(() => {
+          URL.revokeObjectURL(audioUrl);
+          this.fallbackSpeakText(text, tts.voiceId);
+        });
       })
-      .catch(() => {
-        // Graceful fallback to browser speech synthesis
-        this.fallbackSpeakText(text, tts.voiceId);
-      });
+      .catch(() => this.fallbackSpeakText(text, tts.voiceId));
       return;
     }
 
     this.fallbackSpeakText(text, tts.voiceId);
+  }
+
+  fallbackSpeakText    this.fallbackSpeakText(text, tts.voiceId);
   }
 
   fallbackSpeakText(text, voicePref = 'en-IN-Wavenet-D') {
@@ -7557,37 +7567,19 @@ class FusionApp {
   // ========================================================
   // RECIPE POP-OUT MODAL & GEMINI / WORKERS AI SOUS-CHEF
   // ========================================================
-  getGeminiKey() {
-    return localStorage.getItem('fusion_gemini_api_key') || '';
-  }
-
-  setGeminiKey(key) {
-    if (key && key.trim()) {
-      localStorage.setItem('fusion_gemini_api_key', key.trim());
-    } else {
-      localStorage.removeItem('fusion_gemini_api_key');
+  async loadAiProviderStatus() {
+    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
+      this.aiProviderStatus = {};
+      return this.aiProviderStatus;
     }
-  }
-
-  getWorkersAiKey() {
-    return localStorage.getItem('fusion_workers_ai_token') || '';
-  }
-
-  getWorkersAiAccount() {
-    return localStorage.getItem('fusion_workers_ai_account') || '';
-  }
-
-  setWorkersAiConfig(token, accountId) {
-    if (token && token.trim()) {
-      localStorage.setItem('fusion_workers_ai_token', token.trim());
-    } else {
-      localStorage.removeItem('fusion_workers_ai_token');
+    try {
+      const response = await fetch('/api/assistant', { credentials: 'same-origin', cache: 'no-store' });
+      const result = await response.json().catch(() => ({}));
+      this.aiProviderStatus = response.ok && result.success ? (result.providers || {}) : {};
+    } catch (error) {
+      this.aiProviderStatus = {};
     }
-    if (accountId && accountId.trim()) {
-      localStorage.setItem('fusion_workers_ai_account', accountId.trim());
-    } else {
-      localStorage.removeItem('fusion_workers_ai_account');
-    }
+    return this.aiProviderStatus;
   }
 
   openRecipePopout(dishId) {
@@ -7605,8 +7597,8 @@ class FusionApp {
     }
     const completedSteps = this.state.recipeCompletedSteps[dish.id] || [];
     const totalSteps = dish.recipeSteps.length;
-    const hasApiKey = !!this.getGeminiKey();
-    const hasWorkersAi = !!this.getWorkersAiKey();
+    const hasApiKey = !!this.aiProviderStatus?.gemini;
+    const hasWorkersAi = !!this.aiProviderStatus?.workersAI;
 
     dialog.innerHTML = `
       <!-- Header -->
@@ -7977,136 +7969,41 @@ class FusionApp {
     messagesContainer.appendChild(typingBubble);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-    const apiKey = this.getGeminiKey();
-    const workersKey = this.getWorkersAiKey();
-    const workersAccount = this.getWorkersAiAccount();
-
-    const systemPrompt = `You are the Fusion Food Lab culinary assistant, an expert vegetarian cooking guide. 
-Helping a parent and kid (ages 10-16) cook "${dish.name}" (${dish.origin}).
+    const systemPrompt = `You are the Fusion Food Lab culinary assistant, an expert vegetarian cooking guide.
+Create helpful, accurate guidance for the dish "${dish.name}" (${dish.origin}).
 Recipe Description: ${dish.description}.
 Key Substitutes: ${dish.indianSubstitutes.map(s => `${s.substitute} replacing ${s.original} (${s.why})`).join('; ')}.
 Recipe Steps: ${dish.recipeSteps.map(s => `Step ${s.step}: ${s.title} - ${s.text}`).join(' | ')}.
 Food Science: ${dish.scienceNote}.
 
 Guidelines:
-1. Strictly 100% pure vegetarian adaptation.
-2. Cheerful, encouraging kitchen advice tailored for families with children.
-3. Recommend everyday Indian bazaar items (paneer, makhanas, chana, hung curd, gondhoraj lime, spices).
-4. Concise and actionable (under 140 words). Use bold text and bullet points.`;
+1. Keep all adaptations strictly vegetarian.
+2. Use clear, practical culinary language and sensible kitchen-safety reminders.
+3. Prefer familiar Indian ingredients and realistic substitutions.
+4. Keep the answer concise (under 140 words), structured and actionable.`;
 
-    // 1. Try Workers AI first if configured
-    if (workersKey && workersAccount) {
-      try {
-        const fullPrompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n`;
-        const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${workersAccount}/ai/run/@cf/meta/llama-3-8b-instruct`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${workersKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ prompt: fullPrompt, max_tokens: 450 })
-        });
-        const wData = await res.json();
-        typingBubble.remove();
-        if (wData.result && (wData.result.response || wData.result.text)) {
-          const aiText = wData.result.response || wData.result.text;
-          this.appendAiMessage(messagesContainer, aiText + '\n\n*(⚡ Generated via Cloudflare Workers AI)*');
-          sound.playCorrect();
-          return;
-        } else if (wData.errors && wData.errors.length) {
-          console.warn('Workers AI returned errors:', wData.errors);
-        }
-      } catch (wErr) {
-        console.warn('Workers AI connection attempt error:', wErr);
+    try {
+      const response = await fetch('/api/assistant', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ prompt, systemPrompt })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || !result.text) {
+        throw new Error(result.error || 'The AI assistant is not configured.');
       }
-    }
-
-    // 2. Try Gemini API (with multi-model fallback & optional Web2API proxy)
-    if (apiKey || this.state.geminiWeb2ApiUrl) {
-      const fullPrompt = `${systemPrompt}\n\nFamily Question: ${prompt}`;
-      
-      // If Web2API reverse proxy is configured, attempt that first
-      if (this.state.geminiWeb2ApiUrl) {
-        try {
-          const proxyResp = await fetch(`${this.state.geminiWeb2ApiUrl.replace(/\/$/, '')}/v1/chat/completions`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey || 'web2api'}`
-            },
-            body: JSON.stringify({
-              model: 'gemini-1.5-flash',
-              messages: [{ role: 'user', content: fullPrompt }],
-              temperature: 0.7
-            })
-          });
-          if (proxyResp.ok) {
-            const pData = await proxyResp.json();
-            const text = pData.choices?.[0]?.message?.content;
-            if (text) {
-              typingBubble.remove();
-              this.appendAiMessage(messagesContainer, text);
-              sound.playCorrect();
-              return;
-            }
-          }
-        } catch (pErr) {
-          console.warn('Gemini Web2API attempt failed, falling back to direct API:', pErr);
-        }
-      }
-
-      // Direct Gemini API with multi-model fallback (1.5-flash -> 1.5-flash-latest -> 2.0-flash -> gemini-pro)
-      const candidateModels = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-pro'];
-      let lastErrorMessage = '';
-
-      for (const modelName of candidateModels) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: fullPrompt }] }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
-            })
-          });
-
-          const data = await response.json();
-          if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-            typingBubble.remove();
-            const aiText = data.candidates[0].content.parts[0].text;
-            this.appendAiMessage(messagesContainer, aiText);
-            sound.playCorrect();
-            return;
-          }
-
-          if (data.error) {
-            lastErrorMessage = data.error.message || '';
-            // If model not found or unsupported, loop to next candidate
-            if (data.error.code === 404 || lastErrorMessage.toLowerCase().includes('not found') || lastErrorMessage.toLowerCase().includes('not supported')) {
-              continue;
-            }
-          }
-        } catch (fetchErr) {
-          console.warn(`Gemini model ${modelName} fetch error:`, fetchErr);
-        }
-      }
-
-      // If all models failed, provide seamless contextual culinary fallback
+      typingBubble.remove();
+      this.appendAiMessage(messagesContainer, result.text);
+      sound.playCorrect();
+      return;
+    } catch (error) {
       typingBubble.remove();
       const fallbackText = this.getContextualFallback(dish, prompt);
       this.appendAiMessage(messagesContainer, fallbackText);
-      if (lastErrorMessage) {
-        showToast(`AI Studio Notice: ${lastErrorMessage.slice(0, 70)}... (Switched to Smart Offline)`, 'info');
+      if (error?.message) {
+        showToast('Using the built-in cooking guide. Server AI is not available.', 'info');
       }
-      return;
-    } else {
-      // Smart contextual fallback when no API key is set
-      setTimeout(() => {
-        typingBubble.remove();
-        const fallbackText = this.getContextualFallback(dish, prompt);
-        this.appendAiMessage(messagesContainer, fallbackText);
-        sound.playCorrect();
-      }, 120);
     }
   }
 
@@ -8898,7 +8795,7 @@ Guidelines:
         });
 
       } else if (this.adminSubTab === 'voice') {
-        const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D', elevenLabsKey: '' };
+        const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D' };
         body.innerHTML = `
           ${navHtml}
           <div style="background:var(--accent-green-light); border:1.5px solid var(--accent-green); border-radius:var(--radius-sm); padding:0.85rem; margin-bottom:1.25rem;">
@@ -8932,11 +8829,9 @@ Guidelines:
               </select>
             </div>
 
-            <div style="margin-bottom:1rem;">
-              <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted); display:block; margin-bottom:0.3rem;">
-                ElevenLabs Secret API Key (Optional):
-              </label>
-              <input type="password" id="tts-elevenlabs-key" class="api-key-input" placeholder="sk_... (ElevenLabs API Key)" value="${tts.elevenLabsKey || ''}">
+            <div class="admin-ai-config-card" style="margin-bottom:1rem;">
+              <strong style="display:block; margin-bottom:.3rem;">🔐 Neural voice credentials</strong>
+              <p style="font-size:.8rem; line-height:1.5; color:var(--text-muted); margin:0;">Configure <code>ELEVENLABS_API_KEY</code> and optionally <code>ELEVENLABS_VOICE_ID</code> as Cloudflare secrets. The key is never entered into or stored by this browser.</p>
             </div>
 
             <div style="display:flex; gap:0.5rem;">
@@ -8966,7 +8861,7 @@ Guidelines:
         body.querySelector('#btn-save-tts-config')?.addEventListener('click', () => {
           sound.playCorrect();
           tts.voiceId = body.querySelector('#tts-voice-select')?.value || 'en-IN-Wavenet-D';
-          tts.elevenLabsKey = body.querySelector('#tts-elevenlabs-key')?.value.trim() || '';
+          delete tts.elevenLabsKey;
           this.state.ttsConfig = tts;
           this.saveState();
           showToast('Voice & TTS Router settings saved!', 'success');
