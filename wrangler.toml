@@ -1,26 +1,18 @@
-# ====================================================================
-# Cloudflare Pages Configuration for Fusion Food Family Lab
-# ====================================================================
+# Cloudflare Pages configuration for Fusion Food Family Lab.
+# Production assets are assembled with: node scripts/build-pages.mjs
 
 name = "fusionfood"
-compatibility_date = "2024-04-01"
+compatibility_date = "2026-10-31"
 compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "./dist"
 
-# Cloudflare Pages Static Assets Directory
-pages_build_output_dir = "."
-
-# --------------------------------------------------------------------
-# Cloudflare D1 Relational Database Binding
-# --------------------------------------------------------------------
 [[d1_databases]]
 binding = "DB"
 database_name = "foodfusionweb"
-database_id = "653756d0-4a06-4e6a-b022-13d4635125c3"
+database_id = "2cd5a387-170d-46a1-895c-c24deb2f5312"
 
-# --------------------------------------------------------------------
-# Environment Variables & Custom Settings
-# --------------------------------------------------------------------
 [vars]
 ENVIRONMENT = "production"
 APP_NAME = "Fusion Food Family Lab"
-CORS_ORIGIN = "https://fusionfood.pages.dev"
+CORS_ORIGIN = "https://fusionfood-383.pages.dev"
+CORS_ALLOWED_ORIGINS = ""

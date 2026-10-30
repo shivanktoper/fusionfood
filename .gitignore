@@ -12,17 +12,20 @@ desktop.ini
 *.sln
 *.sw?
 
-# Node / package manager (if ever added)
+# Node / package manager
 node_modules/
 package-lock.json
 
 # Local env
 .env
 .env.local
+.dev.vars
+.dev.vars.*
+.wrangler/
 
-# Ephemeral artifacts & test recordings
+# Build output and ephemeral test artefacts
+dist/
 .agents/
 hyperframes/
 mobile_snapshots/
 scratch/
-

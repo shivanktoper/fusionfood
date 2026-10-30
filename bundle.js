@@ -8712,6 +8712,14 @@ Guidelines:
     sound.playClick();
     modal.classList.remove('open');
     document.body.classList.remove('has-modal-open');
+    this.adminSessionActive = false;
+    this.apiKeysLoaded = false;
+    if (typeof window !== 'undefined' && window.location.protocol !== 'file:') {
+      fetch('/api/admin/session', {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      }).catch(() => {});
+    }
   }
 
   async hashLocalAdminPin(pin, saltHex) {
@@ -8953,7 +8961,7 @@ Guidelines:
             ` : ''}
           </div>
 
-          <!-- Secret Admin PIN -->
+          <!-- Admin PIN lives in Cloudflare Secrets, never browser storage. -->
           <div style="background:var(--bg-parchment); border:1.5px solid var(--border-color); border-radius:var(--radius-sm); padding:0.95rem; margin-bottom:1.25rem;">
             <label style="font-size:0.82rem; font-weight:800; color:var(--text-muted); display:block; margin-bottom:0.35rem;">
               Change local admin PIN:
@@ -9360,6 +9368,7 @@ Guidelines:
               spinScience: true
             };
             this.state.v2Features = { ...DEFAULT_STATE.v2Features };
+            this.state.appVersion = DEFAULT_STATE.appVersion;
             this.saveState();
             this.applyV2FeatureVisibility();
             this.renderGameTabs();
@@ -9384,6 +9393,31 @@ Guidelines:
           return;
         }
         // API KEY GENERATOR TAB
+        if (
+          typeof window !== 'undefined' &&
+          window.location.protocol !== 'file:' &&
+          !this.apiKeysLoaded
+        ) {
+          this.apiKeysLoaded = true;
+          fetch('/api/admin/keys', { credentials: 'same-origin' })
+            .then(async response => {
+              const payload = await response.json().catch(() => ({}));
+              if (!response.ok || !payload.success) {
+                throw new Error(payload.error || 'Could not load API keys.');
+              }
+              this.state.apiKeys = (payload.keys || []).map(key => ({
+                keyId: key.keyId, name: key.name, prefix: key.prefix,
+                scope: key.scope, status: key.status,
+                expiresAt: key.expiresAt, createdAt: key.createdAt
+              }));
+              this.saveState();
+              this.renderAdminModalContent(true);
+            })
+            .catch(error => {
+              this.apiKeysLoaded = false;
+              showToast(error.message || 'Could not load API keys.', 'error');
+            });
+        }
         const keysListHtml = (this.state.apiKeys && this.state.apiKeys.length > 0)
           ? this.state.apiKeys.map(k => {
               const isActive = k.status === 'active';
@@ -9596,30 +9630,43 @@ Guidelines:
           }
         });
 
-        document.getElementById('generate-api-key-submit-btn')?.addEventListener('click', () => {
+        document.getElementById('generate-api-key-submit-btn')?.addEventListener('click', async () => {
           const nameInput = document.getElementById('api-key-name-input');
           const scopeSelect = document.getElementById('api-key-scope-select');
           const expirySelect = document.getElementById('api-key-expiry-select');
           const name = (nameInput?.value || '').trim() || 'API Client';
           const scope = scopeSelect?.value || 'read_write';
           const expiryDays = parseInt(expirySelect?.value || '365', 10);
-
-          const key = this.generateApiKey(name, scope, expiryDays);
-          this.lastGeneratedKey = key;
-          sound.playCorrect();
-          showToast(`API Key "${name}" generated!`, 'success');
-          this.renderAdminModalContent(true);
+          const button = document.getElementById('generate-api-key-submit-btn');
+          if (button) button.disabled = true;
+          try {
+            const key = await this.generateApiKey(name, scope, expiryDays);
+            this.lastGeneratedKey = key;
+            sound.playCorrect();
+            showToast(`API Key "${name}" generated!`, 'success');
+            this.renderAdminModalContent(true);
+          } catch (error) {
+            sound.playWrong();
+            showToast(error.message || 'Could not generate API key.', 'error');
+          } finally {
+            if (button) button.disabled = false;
+          }
         });
 
         body.querySelectorAll('.revoke-api-key-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const keyId = btn.getAttribute('data-key-id');
             if (!keyId) return;
             if (confirm('Revoke this API key? Any applications using this token will lose access immediately.')) {
-              sound.playWrong();
-              this.revokeApiKey(keyId);
-              showToast('API key revoked.', 'info');
-              this.renderAdminModalContent(true);
+              try {
+                await this.revokeApiKey(keyId);
+                sound.playWrong();
+                showToast('API key revoked.', 'info');
+                this.renderAdminModalContent(true);
+              } catch (error) {
+                sound.playWrong();
+                showToast(error.message || 'Could not revoke API key.', 'error');
+              }
             }
           });
         });
@@ -9691,23 +9738,42 @@ Guidelines:
     if (typeof window !== 'undefined' && !isGitHubPagesStaticHost() && window.location.protocol !== 'file:') {
       fetch('/api/admin/keys', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newKey.name,
-          scope: newKey.scope,
-          expiryDays: days
+          name: normalizedName,
+          scope,
+          expiryDays: Number.isFinite(days) ? days : 0
         })
-      }).catch(err => {
-        console.warn('Backend API key sync notice (using local state):', err);
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || !result.key) {
+        throw new Error(result.error || `API key creation failed (HTTP ${response.status}).`);
+      }
+      newKey = result.key;
     }
 
+    if (!Array.isArray(this.state.apiKeys)) this.state.apiKeys = [];
+    const { token, ...metadata } = newKey;
+    this.state.apiKeys.unshift(metadata);
+    this.saveState();
     return newKey;
   }
 
-  revokeApiKey(keyId) {
+  async revokeApiKey(keyId) {
+    if (typeof window !== 'undefined' && window.location.protocol !== 'file:') {
+      const response = await fetch(`/api/admin/keys?keyId=${encodeURIComponent(keyId)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin'
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || `API key revocation failed (HTTP ${response.status}).`);
+      }
+    }
+
     if (!Array.isArray(this.state.apiKeys)) return;
-    const key = this.state.apiKeys.find(k => k.keyId === keyId);
+    const key = this.state.apiKeys.find(item => item.keyId === keyId);
     if (key) {
       key.status = 'revoked';
       this.saveState();

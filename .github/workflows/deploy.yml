@@ -1,28 +1,35 @@
-name: Deploy to Cloudflare Pages & Workers
+name: Validate and deploy Fusion Food on Cloudflare
 
 on:
   push:
     branches:
       - main
-      - deploy-fix
+      - cloudflare-compliance-20261031
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    name: Build & Deploy to Cloudflare
-    permissions:
-      contents: read
-      deployments: write
+permissions:
+  contents: read
+  deployments: write
 
+concurrency:
+  group: fusionfood-cloudflare-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Build, test and validate Cloudflare configuration
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Check JavaScript syntax
         run: |
@@ -33,29 +40,80 @@ jobs:
         run: node run_e2e_tests.js --no-chrome
       - name: Verify Binary Parity (app.js vs bundle.js)
         run: |
-          APP_HASH=$(sha256sum app.js | awk '{print $1}')
-          BUNDLE_HASH=$(sha256sum bundle.js | awk '{print $1}')
-          echo "app.js SHA256:    $APP_HASH"
-          echo "bundle.js SHA256: $BUNDLE_HASH"
-          if [ "$APP_HASH" != "$BUNDLE_HASH" ]; then
-            echo "::error::Binary parity failure! app.js and bundle.js are not byte-identical."
+          APP_HASH="$(sha256sum app.js | awk '{print $1}')"
+          BUNDLE_HASH="$(sha256sum bundle.js | awk '{print $1}')"
+          test "$APP_HASH" = "$BUNDLE_HASH" || {
+            echo "::error::app.js and bundle.js are not byte-identical."
             exit 1
-          fi
-          echo "100% Binary Parity Verified."
+          }
 
-      # Deploy 1: Cloudflare Pages (foodfusionweb / fusionfood)
-      - name: Deploy to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        continue-on-error: true
+      - name: Build allowlisted Pages assets
+        run: node scripts/build-pages.mjs
+
+      - name: Validate Cloudflare production configuration
+        run: node scripts/validate-cloudflare.mjs
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          node --check app.js
+          node --check bundle.js
+          node --check scripts/build-pages.mjs
+          node --check scripts/validate-cloudflare.mjs
+          for file in worker/index.js functions/api/*.js functions/api/admin/*.js; do
+            node --input-type=module --check < "$file"
+          done
+
+      # The legacy all-tier suite requires checked-in screenshot/GIF artifacts
+      # and invokes the local-only "agy-node" binary. Run the deterministic API
+      # scenario tier in Linux CI; syntax, parity, build and Worker checks run above.
+      - name: Run deterministic API regression scenarios
+        run: node run_e2e_tests.js --tier=4 --no-chrome
+
+      - name: Validate Worker bundle and Wrangler configuration
+        run: npx --yes wrangler@4 deploy --dry-run --config=wrangler.worker.toml
+
+      - name: Verify Pages output excludes repository source
+        shell: bash
+        run: |
+          test -f dist/index.html
+          test -f dist/bundle.js
+          test -f dist/styles.css
+          test ! -e dist/schema.sql
+          test ! -e dist/worker
+          test ! -e dist/functions
+          test ! -e dist/README.md
+          test ! -e dist/wrangler.toml
+
+  deploy:
+    name: Deploy Pages and API Worker
+    runs-on: ubuntu-latest
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build Pages assets
+        run: node scripts/build-pages.mjs
+
+      - name: Deploy Cloudflare Pages
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy . --project-name=fusionfood --commit-dirty=true
+          wranglerVersion: "4"
+          command: pages deploy dist --project-name=fusionfood --branch=main
 
-      # Deploy 2: Cloudflare Worker (foodfusionweb)
-      - name: Deploy Cloudflare Worker
-        uses: cloudflare/wrangler-action@v3
+      - name: Deploy API-only Cloudflare Worker
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
           command: deploy --config=wrangler.worker.toml
