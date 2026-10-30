@@ -11027,7 +11027,7 @@ Guidelines:
           ];
           group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), gillMat));
         }
-      } else if (name.includes('lime') || name.includes('lemon') || name.includes('citrus')) {
+      } else if ((name.includes('lime') || name.includes('lemon') || name.includes('citrus')) && !name.includes('juice')) {
         const citrusMat = makeMaterial('citrus-peel', '#79a936', '#c4d85b', '#426c2d', { roughness: 0.38, bumpScale: 0.52, clearcoat: 0.42 });
         add(new THREE.SphereGeometry(13, 72, 56), citrusMat, [0, 0, 0], [1.18, 0.82, 0.92]);
         const pith = new THREE.Mesh(new THREE.SphereGeometry(8.2, 48, 32), new THREE.MeshStandardMaterial({ color: 0xe9e1b8, roughness: 0.8 }));
@@ -11070,7 +11070,7 @@ Guidelines:
         add(new THREE.TorusGeometry(10, 2.0, 20, 72), outer);
         add(new THREE.TorusGeometry(6.6, 1.4, 16, 64), center, [0, 0, 0.5]);
         add(new THREE.TorusGeometry(3.2, 1.0, 16, 48), outer, [0, 0, 0.9]);
-      } else if (name.includes('herb') || name.includes('coriander') || name.includes('mint')) {
+      } else if (name.includes('herb') || ((name.includes('coriander') || name.includes('mint')) && !name.includes('chutney'))) {
         const leafMat = makeMaterial('fresh-herb-leaf', '#397947', '#79b86a', '#1b4e34', { roughness: 0.66, bumpScale: 0.12 });
         const stemMat = new THREE.MeshStandardMaterial({ color: 0x6d8e50, roughness: 0.8 });
         for (let i = 0; i < 7; i++) {
@@ -11085,13 +11085,13 @@ Guidelines:
             [Math.cos(angle) * 10, 6 + (i % 2) * 2, Math.sin(angle) * 4], [0.95, 0.24, 0.48]);
           leaf.rotation.z = -angle * 0.6;
         }
-      } else if (name.includes('bell pepper') || name.includes('capsicum') || name.includes('pepper chunk')) {
+      } else if ((name.includes('bell pepper') || name.includes('capsicum') || name.includes('pepper chunk')) && !name.includes('puree')) {
         const colors=name.includes('red')?['#a51f25','#ec6a4e','#54161b']:['#28733c','#8fbe53','#123d2c'];
         const pepperMat=makeMaterial('capsicum-'+colors[0],colors[0],colors[1],colors[2],{roughness:.3,bumpScale:.16,clearcoat:.55});
         add(new THREE.SphereGeometry(12,56,40),pepperMat,[0,-1,0],[1,1.16,.88]);
         for(let i=0;i<4;i++)add(new THREE.SphereGeometry(6.2,24,18),pepperMat,[Math.cos(i*Math.PI/2)*5.4,-2,Math.sin(i*Math.PI/2)*5.2],[.78,1.12,.72]);
         const stem=add(new THREE.CylinderGeometry(1.1,1.5,5.8,12),new THREE.MeshStandardMaterial({color:0x416b38,roughness:.8}),[0,12,0]);stem.rotation.z=.16;
-      } else if(name.includes('pineapple') || (name.includes('tomato') && !name.includes('jam'))) {
+      } else if((name.includes('pineapple') && !name.includes('jam')) || (name.includes('tomato') && !name.includes('jam') && !name.includes('gravy') && !name.includes('ketchup') && !name.includes('glaze'))) {
         const isPineapple=name.includes('pineapple');
         const fruitMat=isPineapple?makeMaterial('pineapple-gold','#d68b21','#f4c65a','#81501d',{roughness:.52,bumpScale:.35}):makeMaterial('tomato-skin','#a92722','#ed6844','#651b1b',{roughness:.34,bumpScale:.2,clearcoat:.42});
         if(isPineapple){
@@ -11131,7 +11131,7 @@ Guidelines:
         const dairy=makeMaterial('creamy-dairy','#e9dfc4','#fff8e8','#b8a98c',{roughness:.3,bumpScale:.12,clearcoat:.38});
         const bowl=new THREE.MeshPhysicalMaterial({color:0x8e9da9,metalness:.55,roughness:.32});
         add(new THREE.CylinderGeometry(12,9,4.5,48),bowl,[0,-7,0]);add(new THREE.SphereGeometry(9,48,32),dairy,[0,-3.3,0],[1,.28,1]);add(new THREE.TorusGeometry(7,.9,10,48),dairy,[0,-3.3,0]);
-      } else if(name.includes('broth') || name.includes('oil') || name.includes('syrup') || name.includes('paste') || name.includes('sauce') || name.includes('gravy') || name.includes('chutney') || name.includes('jam') || name.includes('spread') || name.includes('ketchup') || name.includes('puree') || name.includes('marinara') || name.includes('stock')) {
+      } else if(name.includes('broth') || name.includes('oil') || name.includes('syrup') || name.includes('paste') || name.includes('sauce') || name.includes('gravy') || name.includes('chutney') || name.includes('jam') || name.includes('spread') || name.includes('ketchup') || name.includes('puree') || name.includes('marinara') || name.includes('stock') || name.includes('juice')) {
         const colors=name.includes('wasabi')?['#4f7e36','#a5c36b','#294a24']:name.includes('chocolate')?['#4a2419','#906044','#27130e']:['#9d3a20','#e17b43','#542016'];
         const liquid=makeMaterial('sauce-'+colors[0],colors[0],colors[1],colors[2],{roughness:.27,bumpScale:.1,clearcoat:.52});
         const bowl=new THREE.MeshPhysicalMaterial({color:0xd8d5cf,metalness:.08,roughness:.26,clearcoat:.5});
