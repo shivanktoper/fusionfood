@@ -31,8 +31,8 @@ export async function onRequestGet(context) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL,
         user_name TEXT NOT NULL,
-        avatar TEXT NOT NULL DEFAULT '🎒',
-        role TEXT NOT NULL DEFAULT 'student',
+        avatar TEXT NOT NULL DEFAULT '👨‍🍳',
+        role TEXT NOT NULL DEFAULT 'parent',
         level INTEGER NOT NULL DEFAULT 1,
         game_type TEXT NOT NULL DEFAULT 'overall',
         score INTEGER NOT NULL DEFAULT 0,
@@ -132,7 +132,7 @@ export async function onRequestPost(context) {
   let gameType = (body.gameType || 'overall').toString().trim();
   if (gameType === 'all') gameType = 'overall';
   const avatar = (body.avatar || '🎒').toString().trim();
-  const role = body.role === 'parent' ? 'parent' : 'student';
+  const role = body.role === 'student' ? 'student' : 'parent';
   const country = (body.country || 'Global').toString().trim();
   const score = parseInt(body.score, 10) || 0;
   const xp = Math.max(0, parseInt(body.xp, 10) || 0);
@@ -157,8 +157,8 @@ export async function onRequestPost(context) {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL,
         user_name TEXT NOT NULL,
-        avatar TEXT NOT NULL DEFAULT '🎒',
-        role TEXT NOT NULL DEFAULT 'student',
+        avatar TEXT NOT NULL DEFAULT '👨‍🍳',
+        role TEXT NOT NULL DEFAULT 'parent',
         level INTEGER NOT NULL DEFAULT 1,
         game_type TEXT NOT NULL DEFAULT 'overall',
         score INTEGER NOT NULL DEFAULT 0,
