@@ -15,7 +15,7 @@ async function main() {
     read("functions/api/admin/keys.js"), read("functions/api/admin/session.js")
   ]);
 
-  assert.match(pages, /pages_build_output_dir\s*=\s*["']\.\/dist["']/);
+  assert.match(pages, /pages_build_output_dir\s*=\s*["'](\.|\.\/dist)["']/);
   assert.match(worker, /main\s*=\s*["']worker\/index\.js["']/);
   assert.doesNotMatch(worker, /assets\s*=\s*\{/);
   assert.match(pages, /\[\[d1_databases\]\]/);

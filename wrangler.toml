@@ -1,15 +1,14 @@
 # Cloudflare Pages configuration for Fusion Food Family Lab.
-# Production assets are assembled with: node scripts/build-pages.mjs
 
 name = "fusionfood"
-compatibility_date = "2026-10-31"
+compatibility_date = "2026-10-30"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "./dist"
+pages_build_output_dir = "."
 
 [[d1_databases]]
 binding = "DB"
 database_name = "foodfusionweb"
-database_id = "2cd5a387-170d-46a1-895c-c24deb2f5312"
+database_id = "af600698-1afa-4b2f-8684-82bdf975b554"
 migrations_dir = "migrations"
 
 [vars]
