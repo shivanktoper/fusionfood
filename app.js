@@ -4302,6 +4302,7 @@ class FusionApp {
     this.initScrolltideShowcase();
     this.updateNavAccessibility();
     this.applyV2FeatureVisibility();
+    this.loadGlobalAdminConfig().catch(() => {});
   }
 
   // ========================================================
@@ -4575,6 +4576,8 @@ class FusionApp {
       themeBtn.setAttribute('title', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
       themeBtn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
     }
+    const ingredientScene = this.active3DScenes?.get('dishIngredient');
+    if (ingredientScene?.setTheme) ingredientScene.setTheme(theme);
     this.saveState();
   }
 
@@ -8894,7 +8897,7 @@ Guidelines:
           });
         });
 
-      } else if (this.adminSubTab === 'voice') {      } else if (this.adminSubTab === 'voice') {
+      } else if (this.adminSubTab === 'voice') {
         const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D', elevenLabsKey: '' };
         body.innerHTML = `
           ${navHtml}
@@ -9134,7 +9137,7 @@ Guidelines:
             showToast(error.message || 'Could not restore global settings.', 'error');
           }
         });
-      } else if (this.adminSubTab === 'api') {      } else if (this.adminSubTab === 'api') {
+      } else if (this.adminSubTab === 'api') {
         if (isGitHubPagesStaticHost()) {
           body.innerHTML = `
             <div class="admin-ai-config-card">
@@ -11489,6 +11492,13 @@ Guidelines:
         else cancelAnimationFrame(animId);
       },
       handleResize,
+      setTheme: (theme) => {
+        const dark = theme === 'dark';
+        scene.background.set(dark ? 0x11141c : 0xf1eee8);
+        floor.material.color.setHex(dark ? 0x252833 : 0xd8d0c5);
+        hemi.groundColor.setHex(dark ? 0x24202a : 0x8a8175);
+        contactShadow.material.opacity = dark ? 0.75 : 0.48;
+      },
       updateModel: (ingredientName) => {
         disposeObject(activeMesh);
         scene.remove(activeMesh);
