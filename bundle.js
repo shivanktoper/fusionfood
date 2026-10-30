@@ -1650,7 +1650,7 @@ const STUDENT_RANKS = [
 ];
 
 const PARENT_RANKS = [
-  { level: 1, title: 'Sous-Chef Guide', minXP: 0, maxXP: 450, badge: '👨‍🍳', perks: 'Leading culinary adventures with safe technique.' },
+  { level: 1, title: 'Kitchen Apprentice', minXP: 0, maxXP: 450, badge: '🔥', perks: 'Building confident technique and balanced flavour.' },
   { level: 2, title: 'Recipe Master', minXP: 451, maxXP: 1200, badge: '🥘', perks: 'Mastering food science emulsions and acid curing.' },
   { level: 3, title: 'Executive Fusion Chef', minXP: 1201, maxXP: 99999, badge: '⭐', perks: 'Ultimate family fusion maestro! Zero culinary secrets left.' }
 ];
@@ -2313,7 +2313,7 @@ function fusionFoodIcon(name, size = 25) {
 }
 
 const DEFAULT_STATE = {
-  currentProfile: 'kid',
+  currentProfile: 'parent',
   currentTab: 'games', // 'games', 'kitchen', 'leaderboard'
   onboarded: false,
   hpMode: 'native', // 'native' or 'itch'
@@ -2321,8 +2321,8 @@ const DEFAULT_STATE = {
   leaderboardScope: 'global', // 'global' (Global Hall of Fame)
   profiles: {
     kid: {
-      name: 'Maya',
-      role: 'student', // 'student' or 'parent'
+      name: 'Chef',
+      role: 'parent', // 'student' or 'parent'
       rankLevel: 1,
       avatar: '🎒',
       xp: 270,
@@ -2331,27 +2331,26 @@ const DEFAULT_STATE = {
       unlockedBadges: ['🌱 Junior Taster', '🍄 Shroom Alchemist', '🥘 Dish Master']
     },
     parent: {
-      name: 'Chef Priya',
+      name: 'Chef',
       role: 'parent',
       rankLevel: 1,
       avatar: '👨‍🍳',
       xp: 450,
       streak: 5,
       bests: { hotPotato: 20, trivia: 9, buildDish: 6, pronunciation: 7, scienceSpins: 8 },
-      unlockedBadges: ['👨‍🍳 Sous-Chef Guide', '🔥 Tandoor Wizard', '🎌🇵🇪 Nikkei Explorer']
+      unlockedBadges: ['🔥 Tandoor Specialist', '🎌🇵🇪 Nikkei Explorer']
     }
   },
   gameToggles: {
     buildDish: true,
     pronunciation: true,
     trivia: true,
-    indiaMap: true,
+    indiaMap: false,
     hotPotato: true,
     spinScience: true
   },
   appVersion: 'v2', // 'v1' (Classic), 'v2' (Modern Redesign), 'v3' (AI & AR Vision)
   v2Features: {
-    leaderboardInHeader: true,
     fusionExplorerTab: true,
     hotPotatoEnhanced: true,
     expandedWheel: true,
@@ -2368,7 +2367,6 @@ const DEFAULT_STATE = {
   ttsConfig: {
     provider: 'browser', // 'browser' or 'elevenlabs'
     voiceId: 'en-IN-Wavenet-D',
-    elevenLabsKey: ''
   },
   kidScoreVerifications: [],
   faceHashes: {},
@@ -4122,6 +4120,11 @@ class FusionApp {
 
   loadState() {
     try {
+      try {
+        localStorage.removeItem('fusion_gemini_api_key');
+        localStorage.removeItem('fusion_workers_ai_token');
+        localStorage.removeItem('fusion_workers_ai_account');
+      } catch (storageError) {}
       const saved = localStorage.getItem('fusion_app_state');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -4129,9 +4132,16 @@ class FusionApp {
         if (parsed.gameToggles && parsed.gameToggles.hotPotato === undefined) {
           parsed.gameToggles.hotPotato = true;
         }
-        if (parsed.gameToggles && parsed.gameToggles.indiaMap === undefined) {
-          parsed.gameToggles.indiaMap = true;
+        if (parsed.gameToggles) parsed.gameToggles.indiaMap = false;
+        if (parsed.ttsConfig) {
+          delete parsed.ttsConfig.elevenLabsKey;
+          if (!['browser', 'elevenlabs'].includes(parsed.ttsConfig.provider)) parsed.ttsConfig.provider = 'browser';
         }
+        try {
+          localStorage.removeItem('fusion_gemini_api_key');
+          localStorage.removeItem('fusion_workers_ai_token');
+          localStorage.removeItem('fusion_workers_ai_account');
+        } catch (storageError) {}
         delete parsed.adminPin;
         if (Array.isArray(parsed.apiKeys)) {
           parsed.apiKeys = parsed.apiKeys.filter(key => !['key_master_admin', 'key_public_ro'].includes(key.keyId) && !/^ff_live_(adm|ro)_/.test(key.token || ''));
@@ -4152,6 +4162,14 @@ class FusionApp {
         }
         if (!parsed.appVersion) {
           parsed.appVersion = 'v2';
+        }
+        parsed.currentProfile = 'parent';
+        parsed.activeGameTab = parsed.activeGameTab === 'indiaMap' ? 'buildDish' : parsed.activeGameTab;
+        if (parsed.profiles && parsed.profiles.parent) {
+          parsed.profiles.parent.role = 'parent';
+          if (!parsed.profiles.parent.name || parsed.profiles.parent.name === 'Chef Priya') parsed.profiles.parent.name = 'Chef';
+          parsed.profiles.parent.avatar = '👨‍🍳';
+          parsed.profiles.parent.unlockedBadges = (parsed.profiles.parent.unlockedBadges || []).filter(b => !String(b).includes('Kitchen Apprentice') && !String(b).includes('Sous-Chef Guide'));
         }
         return { 
           ...DEFAULT_STATE, 
@@ -4183,7 +4201,7 @@ class FusionApp {
           Object.entries(this.state.profiles).forEach(([id, prof]) => {
             this.db.set(DB_CONFIG.STORE_PROFILES, { id, ...prof, updatedAt: new Date().toISOString() });
           });
-          const leaderboardEntries = Object.entries(this.state.profiles).map(([id, prof]) => {
+          const leaderboardEntries = Object.entries(this.state.profiles).filter(([id]) => id !== 'kid').map(([id, prof]) => {
             const r = this.getCurrentRank(prof.xp, prof.role);
             return {
               id,
@@ -4251,14 +4269,10 @@ class FusionApp {
     // 3. Reset in-memory state to clean pristine defaults
     this.state = JSON.parse(JSON.stringify(DEFAULT_STATE));
     this.state.onboarded = false;
-    this.state.profiles.kid.xp = 0;
     this.state.profiles.parent.xp = 0;
-    this.state.profiles.kid.streak = 1;
     this.state.profiles.parent.streak = 1;
-    this.state.profiles.kid.bests = { hotPotato: 0, trivia: 0, buildDish: 0, pronunciation: 0, scienceSpins: 0 };
     this.state.profiles.parent.bests = { hotPotato: 0, trivia: 0, buildDish: 0, pronunciation: 0, scienceSpins: 0 };
-    this.state.profiles.kid.unlockedBadges = ['🌱 Junior Taster'];
-    this.state.profiles.parent.unlockedBadges = ['👨‍🍳 Sous-Chef Guide'];
+    this.state.profiles.parent.unlockedBadges = ['🔥 Tandoor Specialist'];
     this.state.completedCityQuests = [];
     this.state.recipeCompletedSteps = {};
 
@@ -4297,6 +4311,8 @@ class FusionApp {
     this.initScrolltideShowcase();
     this.updateNavAccessibility();
     this.applyV2FeatureVisibility();
+    this.loadGlobalAdminConfig().catch(() => {});
+    this.loadAiProviderStatus().catch(() => {});
   }
 
   // ========================================================
@@ -4405,35 +4421,20 @@ class FusionApp {
   }
 
   getActiveProfile() {
-    return this.state.profiles[this.state.currentProfile] || this.state.profiles.kid;
+    return this.state.profiles[this.state.currentProfile] || this.state.profiles.parent;
   }
 
   getDifficultySettings() {
-    const prof = this.getActiveProfile();
-    const isStudent = prof.role === 'student' || this.state.currentProfile === 'kid';
-    if (isStudent) {
-      return {
-        role: 'student',
-        triviaTimer: 50,
-        hpGravity: 0.22,
-        hpCoalsBoost: -8.5,
-        coalsHeight: 70,
-        impostorCount: 3,
-        badgeText: '🎒 Student Mode (Forgiving Timers & Hints)',
-        badgeClass: 'student-mode-badge'
-      };
-    } else {
-      return {
-        role: 'parent',
-        triviaTimer: 25,
-        hpGravity: 0.32,
-        hpCoalsBoost: -7.0,
-        coalsHeight: 45,
-        impostorCount: 6,
-        badgeText: '👨‍🍳 Parent Mode (Pro Kitchen Challenge)',
-        badgeClass: 'parent-mode-badge'
-      };
-    }
+    return {
+      role: 'parent',
+      triviaTimer: 25,
+      hpGravity: 0.32,
+      hpCoalsBoost: -7.0,
+      coalsHeight: 45,
+      impostorCount: 6,
+      badgeText: '👨‍🍳 Adult Chef · Standard Challenge',
+      badgeClass: 'parent-mode-badge'
+    };
   }
 
   getCurrentRank(xp, role = null) {
@@ -4464,189 +4465,51 @@ class FusionApp {
     document.body.classList.remove('has-modal-open');
   }
 
-  openLeaderboardModal() {
-    sound.playClick();
-    const modal = document.getElementById('leaderboard-modal');
-    if (!modal) return;
-    modal.classList.add('open');
-    document.body.classList.add('has-modal-open');
-    this.renderLeaderboardModalContent();
-  }
-
-  closeLeaderboardModal() {
-    sound.playClick();
-    const modal = document.getElementById('leaderboard-modal');
-    if (!modal) return;
-    modal.classList.remove('open');
-    document.body.classList.remove('has-modal-open');
-  }
-
-  renderLeaderboardModalContent() {
-    const body = document.getElementById('leaderboard-modal-body');
-    if (!body) return;
-    const list = this.getLeaderboardData ? this.getLeaderboardData() : (this.state.leaderboard || []);
-    body.innerHTML = `
-      <div style="padding:0.5rem 0;">
-        <p style="color:var(--text-muted); font-size:0.9rem; margin-bottom:1rem;">Top ranked chefs across all interactive arcade labs and kitchen challenges.</p>
-        <div class="table-responsive-wrapper">
-          <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
-            <thead>
-              <tr style="border-bottom:2px solid var(--border-color);">
-                <th style="padding:0.6rem 0.5rem;">Rank</th>
-                <th style="padding:0.6rem 0.5rem;">Chef</th>
-                <th style="padding:0.6rem 0.5rem;">Game</th>
-                <th style="padding:0.6rem 0.5rem;">Score</th>
-                <th style="padding:0.6rem 0.5rem;">Badge</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${list.length === 0 ? `
-                <tr>
-                  <td colspan="5" style="text-align:center; padding:1.5rem; color:var(--text-muted);">
-                    No local scores recorded yet. Complete games to appear on the roster!
-                  </td>
-                </tr>
-              ` : list.slice(0, 10).map((r, i) => `
-                <tr style="border-bottom:1px solid var(--border-color);">
-                  <td style="padding:0.5rem; font-weight:800; color:var(--primary);">#${i + 1}</td>
-                  <td style="padding:0.5rem; font-weight:700;">${this.escapeHtml(r.name || 'Anonymous')}</td>
-                  <td style="padding:0.5rem; color:var(--text-muted);">${this.escapeHtml(r.game || 'Arcade')}</td>
-                  <td style="padding:0.5rem; font-weight:800; color:var(--text-main);">${r.score || 0}</td>
-                  <td style="padding:0.5rem;">${r.badge || '🌟'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-        </div>
-        <div style="margin-top:1.25rem; display:flex; justify-content:flex-end;">
-          <button class="btn btn-primary" id="btn-modal-open-full-leaderboard" style="padding:0.45rem 1rem; font-size:0.84rem;">
-            📊 View Full Rankings & Ladders Page →
-          </button>
-        </div>
-      </div>
-    `;
-
-    body.querySelector('#btn-modal-open-full-leaderboard')?.addEventListener('click', () => {
-      this.closeLeaderboardModal();
-      this.switchMainTab('leaderboard');
-    });
-  }
-
   renderProfileModalContent() {
     const body = document.getElementById('profile-modal-body');
     if (!body) return;
-    const prof = this.getActiveProfile();
-    const currentRole = prof.role || (this.state.currentProfile === 'parent' ? 'parent' : 'student');
-    const currentName = prof.name || (currentRole === 'parent' ? 'Chef Priya' : 'Maya');
+    const profile = this.state.profiles.parent || DEFAULT_STATE.profiles.parent;
+    const currentName = profile.name || 'Chef';
+    const currentRank = profile.rankLevel || 1;
 
     body.innerHTML = `
-      <div style="margin-bottom:1.25rem;">
-        <p style="font-size:0.9rem; color:var(--text-muted); margin-bottom:1rem;">
-          Select your chef role to personalize your family kitchen challenge, timer speeds, and ranks!
-        </p>
-
-        <label style="display:block; font-weight:700; font-size:0.9rem; margin-bottom:0.5rem; color:var(--text-main);">
-          Choose Chef Identity:
-        </label>
-        <div class="profile-role-grid" role="radiogroup" aria-label="Choose Chef Identity">
-          <button type="button" class="profile-role-card ${currentRole === 'student' ? 'selected' : ''}" id="role-select-student" role="radio" aria-checked="${currentRole === 'student' ? 'true' : 'false'}" style="text-align:center; font-family:inherit;">
-            <div style="font-size:2rem; margin-bottom:0.35rem;">🎒</div>
-            <strong style="font-size:1rem; display:block;">Student / Kid Chef</strong>
-            <span style="font-size:0.78rem; color:var(--text-muted);">Forgiving Timers (50s) & Safe Steps</span>
-          </button>
-
-          <button type="button" class="profile-role-card ${currentRole === 'parent' ? 'selected' : ''}" id="role-select-parent" role="radio" aria-checked="${currentRole === 'parent' ? 'true' : 'false'}" style="text-align:center; font-family:inherit;">
-            <div style="font-size:2rem; margin-bottom:0.35rem;">👨‍🍳</div>
-            <strong style="font-size:1rem; display:block;">Parent / Adult Guide</strong>
-            <span style="font-size:0.78rem; color:var(--text-muted);">Pro Challenge (25s) & Tricky Impostors</span>
-          </button>
-        </div>
-
+      <div class="profile-editor-minimal">
+        <p style="color:var(--text-muted); margin-bottom:1rem;">Personalise your chef profile and continue with the standard adult challenge.</p>
         <div class="profile-form-group">
-          <label for="profile-input-name">Your Chef Name:</label>
-          <input type="text" id="profile-input-name" class="profile-form-input" value="${currentName}" placeholder="e.g. Maya or Chef Mom" maxlength="24">
+          <label for="profile-input-name">Chef name</label>
+          <input type="text" id="profile-input-name" class="profile-form-input" value="${this.escapeHtml(currentName)}" maxlength="24" autocomplete="name">
         </div>
-
         <div class="profile-form-group">
-          <label for="profile-select-rank">Starting / Current Rank:</label>
+          <label for="profile-select-rank">Current rank</label>
           <select id="profile-select-rank" class="profile-form-select">
-            ${(currentRole === 'parent' ? PARENT_RANKS : STUDENT_RANKS).map(r => `
-              <option value="${r.level}" ${r.level === (prof.rankLevel || 1) ? 'selected' : ''}>
-                ${r.badge} Level ${r.level}: ${r.title} (${r.minXP}+ XP)
-              </option>
-            `).join('')}
+            ${PARENT_RANKS.map(rank => `<option value="${rank.level}" ${rank.level === currentRank ? 'selected' : ''}>${rank.badge} Level ${rank.level}: ${rank.title} (${rank.minXP}+ XP)</option>`).join('')}
           </select>
         </div>
-
-        <button class="btn btn-primary" id="save-profile-btn" style="width:100%; padding:0.85rem; font-size:1.05rem; margin-top:0.75rem;">
-          ✨ Let's Cook & Play!
-        </button>
+        <button class="btn btn-primary" id="save-profile-btn" style="width:100%; margin-top:.75rem;">Save chef profile</button>
       </div>
     `;
 
-    // Role switcher events inside modal
-    let selectedRole = currentRole;
-    const cardStudent = body.querySelector('#role-select-student');
-    const cardParent = body.querySelector('#role-select-parent');
-    const rankSelect = body.querySelector('#profile-select-rank');
-
-    const updateRankDropdown = (role) => {
-      const list = role === 'parent' ? PARENT_RANKS : STUDENT_RANKS;
-      rankSelect.innerHTML = list.map(r => `
-        <option value="${r.level}">
-          ${r.badge} Level ${r.level}: ${r.title} (${r.minXP}+ XP)
-        </option>
-      `).join('');
-    };
-
-    cardStudent?.addEventListener('click', () => {
-      sound.playClick();
-      selectedRole = 'student';
-      cardStudent.classList.add('selected');
-      cardStudent.setAttribute('aria-checked', 'true');
-      cardParent.classList.remove('selected');
-      cardParent.setAttribute('aria-checked', 'false');
-      updateRankDropdown('student');
-    });
-
-    cardParent?.addEventListener('click', () => {
-      sound.playClick();
-      selectedRole = 'parent';
-      cardParent.classList.add('selected');
-      cardParent.setAttribute('aria-checked', 'true');
-      cardStudent.classList.remove('selected');
-      cardStudent.setAttribute('aria-checked', 'false');
-      updateRankDropdown('parent');
-    });
-
     body.querySelector('#save-profile-btn')?.addEventListener('click', () => {
-      const nameInput = body.querySelector('#profile-input-name');
-      const name = nameInput ? nameInput.value.trim() : (selectedRole === 'parent' ? 'Chef Priya' : 'Maya');
-      const rankLevel = parseInt(rankSelect ? rankSelect.value : '1', 10);
-      this.saveProfile(name || (selectedRole === 'parent' ? 'Chef Priya' : 'Maya'), selectedRole, rankLevel);
+      const name = body.querySelector('#profile-input-name')?.value.trim() || 'Chef';
+      const rankLevel = Number.parseInt(body.querySelector('#profile-select-rank')?.value || '1', 10);
+      this.saveProfile(name, 'parent', rankLevel);
     });
   }
 
   saveProfile(name, role, rankLevel) {
     sound.playCorrect();
-    const profileKey = role === 'parent' ? 'parent' : 'kid';
+    const profileKey = 'parent';
     this.state.currentProfile = profileKey;
-    const ranks = role === 'parent' ? PARENT_RANKS : STUDENT_RANKS;
-    const chosenRank = ranks.find(r => r.level === rankLevel) || ranks[0];
-
-    if (!this.state.profiles[profileKey]) {
-      this.state.profiles[profileKey] = {};
-    }
-    const prof = this.state.profiles[profileKey];
-    prof.name = name;
-    prof.role = role;
-    prof.rankLevel = rankLevel;
-    prof.avatar = role === 'parent' ? '👨‍🍳' : '🎒';
-    if (prof.xp < chosenRank.minXP) {
-      prof.xp = chosenRank.minXP;
-    }
+    const ranks = PARENT_RANKS;
+    const chosenRank = ranks.find(rank => rank.level === rankLevel) || ranks[0];
+    if (!this.state.profiles[profileKey]) this.state.profiles[profileKey] = {};
+    const profile = this.state.profiles[profileKey];
+    profile.name = name;
+    profile.role = 'parent';
+    profile.rankLevel = rankLevel;
+    profile.avatar = '👨‍🍳';
+    if (profile.xp < chosenRank.minXP) profile.xp = chosenRank.minXP;
     this.state.onboarded = true;
-
     this.saveState();
     this.closeProfileModal();
     this.renderHeader();
@@ -4719,9 +4582,12 @@ class FusionApp {
     document.documentElement.setAttribute('data-theme', theme);
     const themeBtn = document.getElementById('theme-toggle-btn');
     if (themeBtn) {
-      themeBtn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
-      themeBtn.setAttribute('title', theme === 'dark' ? 'Switch to Light-Blue Mode' : 'Switch to Obsidian Black Mode');
+      themeBtn.innerHTML = theme === 'dark' ? '<span aria-hidden="true">☀️</span><span>Switch to light</span>' : '<span aria-hidden="true">🌙</span><span>Switch to dark</span>';
+      themeBtn.setAttribute('title', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+      themeBtn.setAttribute('aria-label', theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
     }
+    const ingredientScene = this.active3DScenes?.get('dishIngredient');
+    if (ingredientScene?.setTheme) ingredientScene.setTheme(theme);
     this.saveState();
   }
 
@@ -4737,8 +4603,9 @@ class FusionApp {
     sound.playClick();
     const soundBtn = document.getElementById('sound-toggle-btn');
     if (soundBtn) {
-      soundBtn.innerHTML = muted ? '🔇' : '🔊';
-      soundBtn.setAttribute('title', muted ? 'Unmute Sound Effects' : 'Mute Sound Effects');
+      soundBtn.innerHTML = muted ? '<span aria-hidden="true">🔇</span><span>Sound off</span>' : '<span aria-hidden="true">🔊</span><span>Sound on</span>';
+      soundBtn.setAttribute('title', muted ? 'Turn sound on' : 'Turn sound off');
+      soundBtn.setAttribute('aria-label', muted ? 'Turn sound on' : 'Turn sound off');
     }
     showToast(muted ? 'Sound Effects Muted 🔇' : 'Sound Effects Enabled 🔊', 'info');
   }
@@ -4758,7 +4625,7 @@ class FusionApp {
 
     const soundBtn = document.getElementById('sound-toggle-btn');
     if (soundBtn) {
-      soundBtn.innerHTML = sound.isMuted() ? '🔇' : '🔊';
+      soundBtn.innerHTML = sound.isMuted() ? '<span aria-hidden="true">🔇</span><span>Sound off</span>' : '<span aria-hidden="true">🔊</span><span>Sound on</span>';
     }
   }
 
@@ -4781,7 +4648,7 @@ class FusionApp {
         <div class="progress-info">
           <h4>
             <span>${rank.title}</span>
-            <span style="font-size:0.85rem; font-weight:normal; color:var(--text-muted);">(Level ${rank.level} • ${profile.role === 'parent' ? 'Parent Guide' : 'Student Chef'})</span>
+            <span style="font-size:0.85rem; font-weight:normal; color:var(--text-muted);">(Level ${rank.level} • ${profile.role === 'parent' ? 'Adult Chef' : 'Adult Chef'})</span>
             <span class="pill-badge" style="margin-left:auto;">${profile.xp} XP</span>
           </h4>
           <div class="progress-bar-track">
@@ -4811,7 +4678,6 @@ class FusionApp {
       { id: 'buildDish', name: 'Build-a-Dish', icon: 'plate', desc: 'Pantry Rush & Recipe Simulation', activeDesc: 'Timed hunt + step sequence' },
       { id: 'pronunciation', name: 'Pronounce Lab', icon: 'audio', desc: 'Phonetic Matching & Voice Check', activeDesc: 'Listen, reorder & speak' },
       { id: 'trivia', name: 'Family Trivia', icon: 'brain', desc: '10 Qs with Soft Timer & Hints', activeDesc: 'Food science & origins' },
-      { id: 'indiaMap', name: 'India Fusion Map', icon: 'map', desc: 'Metro Quests & Bazaar Markets', activeDesc: 'City quests & ingredients' },
       { id: 'hotPotato', name: 'Hot Potato Rush', icon: 'potato', desc: 'Whack, Cook in Coals & Serve Golden', activeDesc: '60-second round' },
       { id: 'spinScience', name: 'Science Wheel', icon: 'science', desc: 'Food Chemistry Explanations', activeDesc: 'Spin & discover reactions' }
     ];
@@ -4986,7 +4852,7 @@ class FusionApp {
                 Collected: ${completedCount} / ${correctItems.length}
               </span>
             </h4>
-            <p>Tap the authentic vegetarian ingredients! Beware of non-veg or clashing impostors (${diff.role === 'student' ? 'Kid-safe simple choices' : 'Pro chef tricky distractors'}).</p>
+            <p>Select the authentic vegetarian ingredients. Distractors test your culinary judgement.</p>
             
             <div class="pantry-items-grid">
               ${displayPantryItems.map((item) => {
@@ -5019,12 +4885,12 @@ class FusionApp {
                 ${dish.recipeSteps.map((step, sIdx) => {
                   const stepDone = completedCount >= (sIdx + 1) * Math.ceil(correctItems.length / dish.recipeSteps.length);
                   return `
-                    <div class="step-card ${stepDone || isFinished ? 'completed' : ''}" style="${diff.role === 'student' && step.kidSafe ? 'border-left: 4px solid var(--accent-green);' : ''}">
+                    <div class="step-card ${stepDone || isFinished ? 'completed' : ''}" >
                       <div class="step-number">${sIdx + 1}</div>
                       <div>
                         <strong>${step.title}</strong>
                         <div style="font-size:0.82rem; color:var(--text-muted); margin-top:2px;">${step.text}</div>
-                        ${step.kidSafe ? '<span class="pill-badge" style="font-size:0.7rem; color:var(--accent-green); background:var(--accent-green-light); margin-top:4px; display:inline-block;">👶 Kid-Friendly Step</span>' : '<span class="pill-badge" style="font-size:0.7rem; color:var(--secondary); background:var(--secondary-light); margin-top:4px; display:inline-block;">👨‍🍳 Parent Supervision</span>'}
+                        <span class="pill-badge" style="font-size:0.7rem; color:var(--secondary); background:var(--secondary-light); margin-top:4px; display:inline-block;">Chef Technique</span>
                       </div>
                     </div>
                   `;
@@ -5272,33 +5138,31 @@ class FusionApp {
   }
 
   speakText(text) {
-    const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D', elevenLabsKey: '' };
+    const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D' };
     
-    // ElevenLabs Direct API router if enabled and key provided
-    if (tts.provider === 'elevenlabs' && tts.elevenLabsKey) {
-      fetch('https://api.elevenlabs.io/v1/text-to-speech/21m00Tcm4TlvDq8ikWAM', {
+    // The provider credential remains server-side in Cloudflare secrets.
+    if (tts.provider === 'elevenlabs' && typeof window !== 'undefined' &&
+        window.location.protocol !== 'file:' && !isGitHubPagesStaticHost()) {
+      fetch('/api/voice', {
         method: 'POST',
-        headers: {
-          'Accept': 'audio/mpeg',
-          'Content-Type': 'application/json',
-          'xi-api-key': tts.elevenLabsKey
-        },
-        body: JSON.stringify({
-          text: text,
-          model_id: 'eleven_monolingual_v1',
-          voice_settings: { stability: 0.65, similarity_boost: 0.75 }
-        })
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+        body: JSON.stringify({ text })
       })
-      .then(res => res.blob())
+      .then(async response => {
+        if (!response.ok) throw new Error('Neural voice is unavailable.');
+        return response.blob();
+      })
       .then(blob => {
         const audioUrl = URL.createObjectURL(blob);
         const audio = new Audio(audioUrl);
-        audio.play().catch(() => {});
+        audio.addEventListener('ended', () => URL.revokeObjectURL(audioUrl), { once: true });
+        audio.play().catch(() => {
+          URL.revokeObjectURL(audioUrl);
+          this.fallbackSpeakText(text, tts.voiceId);
+        });
       })
-      .catch(() => {
-        // Graceful fallback to browser speech synthesis
-        this.fallbackSpeakText(text, tts.voiceId);
-      });
+      .catch(() => this.fallbackSpeakText(text, tts.voiceId));
       return;
     }
 
@@ -6606,9 +6470,7 @@ class FusionApp {
 
     const diff = this.getDifficultySettings();
     const diffBadge = document.getElementById('hp-modal-diff-badge');
-    if (diffBadge) {
-      diffBadge.innerText = diff.role === 'student' ? '🎒 Kid Chef Mode' : '👨‍🍳 Pro Parent Mode';
-    }
+    if (diffBadge) diffBadge.innerText = '👨‍🍳 Adult Chef';
 
     const canvas = document.getElementById('hp-fullscreen-canvas');
     if (!canvas) return;
@@ -7703,37 +7565,19 @@ class FusionApp {
   // ========================================================
   // RECIPE POP-OUT MODAL & GEMINI / WORKERS AI SOUS-CHEF
   // ========================================================
-  getGeminiKey() {
-    return localStorage.getItem('fusion_gemini_api_key') || '';
-  }
-
-  setGeminiKey(key) {
-    if (key && key.trim()) {
-      localStorage.setItem('fusion_gemini_api_key', key.trim());
-    } else {
-      localStorage.removeItem('fusion_gemini_api_key');
+  async loadAiProviderStatus() {
+    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
+      this.aiProviderStatus = {};
+      return this.aiProviderStatus;
     }
-  }
-
-  getWorkersAiKey() {
-    return localStorage.getItem('fusion_workers_ai_token') || '';
-  }
-
-  getWorkersAiAccount() {
-    return localStorage.getItem('fusion_workers_ai_account') || '';
-  }
-
-  setWorkersAiConfig(token, accountId) {
-    if (token && token.trim()) {
-      localStorage.setItem('fusion_workers_ai_token', token.trim());
-    } else {
-      localStorage.removeItem('fusion_workers_ai_token');
+    try {
+      const response = await fetch('/api/assistant', { credentials: 'same-origin', cache: 'no-store' });
+      const result = await response.json().catch(() => ({}));
+      this.aiProviderStatus = response.ok && result.success ? (result.providers || {}) : {};
+    } catch (error) {
+      this.aiProviderStatus = {};
     }
-    if (accountId && accountId.trim()) {
-      localStorage.setItem('fusion_workers_ai_account', accountId.trim());
-    } else {
-      localStorage.removeItem('fusion_workers_ai_account');
-    }
+    return this.aiProviderStatus;
   }
 
   openRecipePopout(dishId) {
@@ -7751,8 +7595,8 @@ class FusionApp {
     }
     const completedSteps = this.state.recipeCompletedSteps[dish.id] || [];
     const totalSteps = dish.recipeSteps.length;
-    const hasApiKey = !!this.getGeminiKey();
-    const hasWorkersAi = !!this.getWorkersAiKey();
+    const hasApiKey = !!this.aiProviderStatus?.gemini;
+    const hasWorkersAi = !!this.aiProviderStatus?.workersAI;
 
     dialog.innerHTML = `
       <!-- Header -->
@@ -7862,7 +7706,7 @@ class FusionApp {
                       </div>
                       <div class="step-header-actions">
                         ${s.kidSafe 
-                          ? '<span class="pill-badge" style="background:var(--tag-veg-bg); color:var(--accent-green); border-color:var(--tag-veg-border); font-size:0.75rem;">👶 Kid-Friendly</span>'
+                          ? '<span class="pill-badge" style="background:var(--tag-veg-bg); color:var(--accent-green); border-color:var(--tag-veg-border); font-size:0.75rem;">👶 Guided</span>'
                           : '<span class="pill-badge" style="background:#fff1f2; color:#e11d48; border-color:#fecdd3; font-size:0.75rem;">🔥 Parent Assistance</span>'
                         }
                         <button class="step-checkbox-btn ${isDone ? 'checked' : ''}" data-step="${s.step}">
@@ -7913,7 +7757,7 @@ class FusionApp {
             <!-- Welcome Bubble -->
             <div class="chat-bubble ai">
               <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.25rem; font-weight:800; font-size:0.78rem; color:var(--primary);">
-                <span>👩‍🍳 Sous-Chef Maya</span>
+                <span>👩‍🍳 Kitchen Assistant</span>
               </div>
               Namaste! I'm your AI Sous-Chef for <strong>${dish.name}</strong>. How can I assist your kitchen adventure today?
             </div>
@@ -7921,7 +7765,7 @@ class FusionApp {
 
           <!-- Quick Suggestions Chips -->
           <div class="chat-chip-suggestions" id="chat-chip-suggestions">
-            <button class="chat-chip" data-prompt="How can I make ${dish.name} less spicy and super kid-friendly?">🌶️ Kid-Friendly Spice</button>
+            <button class="chat-chip" data-prompt="How can I make ${dish.name} less spicy and super guided?">🌶️ Guided Spice</button>
             <button class="chat-chip" data-prompt="What if I don't have the primary desi substitute, what can I use?">🥫 Missing Substitutes</button>
             <button class="chat-chip" data-prompt="Can I prepare this in advance for a family party?">⏱️ Prep Shortcuts</button>
             <button class="chat-chip" data-prompt="Explain the food science of ${dish.name} so I can teach my kids!">🧪 Science for Kids</button>
@@ -8114,7 +7958,7 @@ class FusionApp {
     typingBubble.id = 'ai-typing-indicator';
     typingBubble.innerHTML = `
       <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.25rem; font-weight:800; font-size:0.78rem; color:var(--primary);">
-        <span>👩‍🍳 Sous-Chef Maya</span>
+        <span>👩‍🍳 Kitchen Assistant</span>
       </div>
       <div class="typing-dots">
         <span></span><span></span><span></span>
@@ -8123,136 +7967,41 @@ class FusionApp {
     messagesContainer.appendChild(typingBubble);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-    const apiKey = this.getGeminiKey();
-    const workersKey = this.getWorkersAiKey();
-    const workersAccount = this.getWorkersAiAccount();
-
-    const systemPrompt = `You are Chef Maya, an expert vegetarian AI Sous-Chef for Fusion Food Family Lab. 
-Helping a parent and kid (ages 10-16) cook "${dish.name}" (${dish.origin}).
+    const systemPrompt = `You are the Fusion Food Lab culinary assistant, an expert vegetarian cooking guide.
+Create helpful, accurate guidance for the dish "${dish.name}" (${dish.origin}).
 Recipe Description: ${dish.description}.
 Key Substitutes: ${dish.indianSubstitutes.map(s => `${s.substitute} replacing ${s.original} (${s.why})`).join('; ')}.
 Recipe Steps: ${dish.recipeSteps.map(s => `Step ${s.step}: ${s.title} - ${s.text}`).join(' | ')}.
 Food Science: ${dish.scienceNote}.
 
 Guidelines:
-1. Strictly 100% pure vegetarian adaptation.
-2. Cheerful, encouraging kitchen advice tailored for families with children.
-3. Recommend everyday Indian bazaar items (paneer, makhanas, chana, hung curd, gondhoraj lime, spices).
-4. Concise and actionable (under 140 words). Use bold text and bullet points.`;
+1. Keep all adaptations strictly vegetarian.
+2. Use clear, practical culinary language and sensible kitchen-safety reminders.
+3. Prefer familiar Indian ingredients and realistic substitutions.
+4. Keep the answer concise (under 140 words), structured and actionable.`;
 
-    // 1. Try Workers AI first if configured
-    if (workersKey && workersAccount) {
-      try {
-        const fullPrompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n${systemPrompt}<|eot_id|><|start_header_id|>user<|end_header_id|>\n${prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n`;
-        const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${workersAccount}/ai/run/@cf/meta/llama-3-8b-instruct`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${workersKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ prompt: fullPrompt, max_tokens: 450 })
-        });
-        const wData = await res.json();
-        typingBubble.remove();
-        if (wData.result && (wData.result.response || wData.result.text)) {
-          const aiText = wData.result.response || wData.result.text;
-          this.appendAiMessage(messagesContainer, aiText + '\n\n*(⚡ Generated via Cloudflare Workers AI)*');
-          sound.playCorrect();
-          return;
-        } else if (wData.errors && wData.errors.length) {
-          console.warn('Workers AI returned errors:', wData.errors);
-        }
-      } catch (wErr) {
-        console.warn('Workers AI connection attempt error:', wErr);
+    try {
+      const response = await fetch('/api/assistant', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ prompt, systemPrompt })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.success || !result.text) {
+        throw new Error(result.error || 'The AI assistant is not configured.');
       }
-    }
-
-    // 2. Try Gemini API (with multi-model fallback & optional Web2API proxy)
-    if (apiKey || this.state.geminiWeb2ApiUrl) {
-      const fullPrompt = `${systemPrompt}\n\nFamily Question: ${prompt}`;
-      
-      // If Web2API reverse proxy is configured, attempt that first
-      if (this.state.geminiWeb2ApiUrl) {
-        try {
-          const proxyResp = await fetch(`${this.state.geminiWeb2ApiUrl.replace(/\/$/, '')}/v1/chat/completions`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey || 'web2api'}`
-            },
-            body: JSON.stringify({
-              model: 'gemini-1.5-flash',
-              messages: [{ role: 'user', content: fullPrompt }],
-              temperature: 0.7
-            })
-          });
-          if (proxyResp.ok) {
-            const pData = await proxyResp.json();
-            const text = pData.choices?.[0]?.message?.content;
-            if (text) {
-              typingBubble.remove();
-              this.appendAiMessage(messagesContainer, text);
-              sound.playCorrect();
-              return;
-            }
-          }
-        } catch (pErr) {
-          console.warn('Gemini Web2API attempt failed, falling back to direct API:', pErr);
-        }
-      }
-
-      // Direct Gemini API with multi-model fallback (1.5-flash -> 1.5-flash-latest -> 2.0-flash -> gemini-pro)
-      const candidateModels = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-2.0-flash', 'gemini-pro'];
-      let lastErrorMessage = '';
-
-      for (const modelName of candidateModels) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: fullPrompt }] }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 500 }
-            })
-          });
-
-          const data = await response.json();
-          if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-            typingBubble.remove();
-            const aiText = data.candidates[0].content.parts[0].text;
-            this.appendAiMessage(messagesContainer, aiText);
-            sound.playCorrect();
-            return;
-          }
-
-          if (data.error) {
-            lastErrorMessage = data.error.message || '';
-            // If model not found or unsupported, loop to next candidate
-            if (data.error.code === 404 || lastErrorMessage.toLowerCase().includes('not found') || lastErrorMessage.toLowerCase().includes('not supported')) {
-              continue;
-            }
-          }
-        } catch (fetchErr) {
-          console.warn(`Gemini model ${modelName} fetch error:`, fetchErr);
-        }
-      }
-
-      // If all models failed, provide seamless contextual culinary fallback
+      typingBubble.remove();
+      this.appendAiMessage(messagesContainer, result.text);
+      sound.playCorrect();
+      return;
+    } catch (error) {
       typingBubble.remove();
       const fallbackText = this.getContextualFallback(dish, prompt);
       this.appendAiMessage(messagesContainer, fallbackText);
-      if (lastErrorMessage) {
-        showToast(`AI Studio Notice: ${lastErrorMessage.slice(0, 70)}... (Switched to Smart Offline)`, 'info');
+      if (error?.message) {
+        showToast('Using the built-in cooking guide. Server AI is not available.', 'info');
       }
-      return;
-    } else {
-      // Smart contextual fallback when no API key is set
-      setTimeout(() => {
-        typingBubble.remove();
-        const fallbackText = this.getContextualFallback(dish, prompt);
-        this.appendAiMessage(messagesContainer, fallbackText);
-        sound.playCorrect();
-      }, 120);
     }
   }
 
@@ -8270,7 +8019,7 @@ Guidelines:
 
     bubble.innerHTML = `
       <div style="display:flex; align-items:center; gap:0.4rem; margin-bottom:0.25rem; font-weight:800; font-size:0.78rem; color:var(--primary);">
-        <span>👩‍🍳 Sous-Chef Maya</span>
+        <span>👩‍🍳 Kitchen Assistant</span>
       </div>
       <div>${formatted}</div>
     `;
@@ -8284,7 +8033,7 @@ Guidelines:
     let advice = '';
 
     if (lower.includes('spice') || lower.includes('kid') || lower.includes('mild')) {
-      advice = `To make **${dish.name}** extra kid-friendly:\n` +
+      advice = `To make **${dish.name}** extra guided:\n` +
         `• Halve any fresh green chilies or use sweet yellow bell pepper instead.\n` +
         `• Add a teaspoon of honey or a dollop of fresh cream / hung curd to balance the spice.\n` +
         `• Keep raw garnishes like fresh coriander on the side so kids can add their own!`;
@@ -8352,7 +8101,7 @@ Guidelines:
         </div>`
       : '';
 
-    rosterContainer.innerHTML = noticeHtml + Object.entries(this.state.profiles)
+    rosterContainer.innerHTML = noticeHtml + Object.entries(this.state.profiles).filter(([key]) => key !== 'kid')
       .sort(([,a],[,b]) => {
         const aRank = this.getCurrentRank(a.xp, a.role);
         const bRank = this.getCurrentRank(b.xp, b.role);
@@ -8430,7 +8179,7 @@ Guidelines:
                 <span style="font-size:2.2rem;">${p.avatar}</span>
                 <div>
                   <strong style="font-size:1.05rem;">${this.escapeHtml(p.name)}</strong>
-                  <div style="font-size:0.82rem; color:var(--text-muted);">👑 Level ${pRank.level} — ${pRank.title} • ${p.role === 'parent' ? 'Parent Guide' : 'Student Chef'}</div>
+                  <div style="font-size:0.82rem; color:var(--text-muted);">👑 Level ${pRank.level} — ${pRank.title} • ${p.role === 'parent' ? 'Adult Chef' : 'Adult Chef'}</div>
                 </div>
               </div>
               <div style="text-align:right; margin-right:2rem;">
@@ -8540,7 +8289,7 @@ Guidelines:
                     <span>•</span>
                     <span>👑 Level ${p.level || 1}</span>
                     <span>•</span>
-                    <span>${p.role === 'parent' ? '👨‍🍳 Parent Guide' : '🎒 Student Chef'}</span>
+                    <span>${p.role === 'parent' ? '👨‍🍳 Adult Chef' : '🎒 Adult Chef'}</span>
                   </div>
                 </div>
               </div>
@@ -8626,7 +8375,7 @@ Guidelines:
                           <span>•</span>
                           <span>👑 Level ${p.level || 1}</span>
                           <span>•</span>
-                          <span>${p.role === 'parent' ? '👨‍🍳 Parent Guide' : '🎒 Student Chef'}</span>
+                          <span>${p.role === 'parent' ? '👨‍🍳 Adult Chef' : '🎒 Adult Chef'}</span>
                         </div>
                       </div>
                     </div>
@@ -8703,7 +8452,18 @@ Guidelines:
     if (!modal) return;
     modal.classList.add('open');
     document.body.classList.add('has-modal-open');
+    this.adminSessionActive = false;
     this.renderAdminModalContent(false);
+    if (window.location.protocol === 'file:' || isGitHubPagesStaticHost()) return;
+    fetch('/api/admin/session', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload.success && payload.authenticated) {
+          this.adminSessionActive = true;
+          this.renderAdminModalContent(true);
+        }
+      })
+      .catch(() => {});
   }
 
   closeAdminModal() {
@@ -8722,17 +8482,67 @@ Guidelines:
     }
   }
 
-  async hashLocalAdminPin(pin, saltHex) {
-    const salt = Uint8Array.from((saltHex.match(/.{2}/g) || []), pair => parseInt(pair, 16));
-    const key = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
-    const bits = await window.crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' }, key, 256);
-    return Array.from(new Uint8Array(bits), byte => byte.toString(16).padStart(2, '0')).join('');
+  applyGlobalAdminConfig(config) {
+    if (!config || typeof config !== 'object') return false;
+    if (['v1', 'v2', 'v3'].includes(config.appVersion)) this.state.appVersion = config.appVersion;
+    const currentGames = this.state.gameToggles || {};
+    this.state.gameToggles = { ...currentGames, ...(config.gameToggles || {}), indiaMap: false };
+    const currentFeatures = this.state.v2Features || {};
+    this.state.v2Features = { ...currentFeatures, ...(config.v2Features || {}) };
+    delete this.state.v2Features.leaderboardInHeader;
+    if (this.state.activeGameTab === 'indiaMap') this.state.activeGameTab = 'buildDish';
+    return true;
   }
 
-  async saveLocalAdminPin(pin) {
-    const salt = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
-    const digest = await this.hashLocalAdminPin(pin, salt);
-    localStorage.setItem('fusion_admin_pin_v1', salt + ':' + digest);
+  async loadGlobalAdminConfig() {
+    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) return false;
+    try {
+      const response = await fetch('/api/config', { credentials: 'same-origin', cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !this.applyGlobalAdminConfig(payload.config)) return false;
+      this.applyV2FeatureVisibility();
+      this.renderGameTabs();
+      this.renderActiveGame();
+      this.renderLeaderboard();
+      return true;
+    } catch (error) {
+      console.warn('Global site settings could not be loaded:', error);
+      return false;
+    }
+  }
+
+  async saveGlobalAdminConfig() {
+    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
+      throw new Error('Global settings require the Cloudflare Pages backend.');
+    }
+    const config = {
+      appVersion: this.state.appVersion,
+      gameToggles: {
+        buildDish: this.state.gameToggles.buildDish !== false,
+        pronunciation: this.state.gameToggles.pronunciation !== false,
+        trivia: this.state.gameToggles.trivia !== false,
+        hotPotato: this.state.gameToggles.hotPotato !== false,
+        spinScience: this.state.gameToggles.spinScience !== false,
+        indiaMap: false
+      },
+      v2Features: {
+        fusionExplorerTab: this.state.v2Features?.fusionExplorerTab !== false,
+        tandoorSkewerGame: this.state.v2Features?.tandoorSkewerGame !== false,
+        chefHatCameraFilter: this.state.v2Features?.chefHatCameraFilter !== false,
+        faceVectorAntiDuplication: this.state.v2Features?.faceVectorAntiDuplication !== false,
+        pdfPortfolioExport: this.state.v2Features?.pdfPortfolioExport !== false,
+        aiFaceExplainerTour: this.state.v2Features?.aiFaceExplainerTour !== false
+      }
+    };
+    const response = await fetch('/api/admin/config', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ config })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.success) throw new Error(payload.error || 'Could not publish shared settings.');
+    return payload.config;
   }
 
   renderAdminModalContent(isAuthenticated = false) {
@@ -8740,49 +8550,61 @@ Guidelines:
     if (!body) return;
 
     if (!isAuthenticated) {
-      const storedPin = localStorage.getItem('fusion_admin_pin_v1');
-      const isFirstSetup = !storedPin;
-      body.innerHTML = [
-        '<div class="admin-lock-intro">',
-        '<h4>' + (isFirstSetup ? 'Create a local admin PIN' : 'Unlock local admin settings') + '</h4>',
-        '<p>' + (isFirstSetup ? 'Set a new PIN for this browser. The old default credential has been retired.' : 'Enter the PIN configured on this device.') + '</p>',
-        '<p class="admin-lock-note">This is a local interface lock only. It does not authenticate or protect server-side database operations.</p>',
-        '</div>',
-        '<div class="pin-input-group">',
-        '<label class="sr-only" for="admin-pin-field">' + (isFirstSetup ? 'Create admin PIN' : 'Admin PIN') + '</label>',
-        '<input type="password" id="admin-pin-field" class="pin-input" placeholder="' + (isFirstSetup ? 'Create an 8+ character PIN' : 'Enter local PIN') + '" minlength="8" maxlength="64" autocomplete="current-password" />',
-        '<button type="button" class="btn btn-primary" id="admin-submit-pin-btn">' + (isFirstSetup ? 'Save PIN' : 'Unlock') + '</button>',
-        '</div>',
-        '<div id="pin-error-msg" class="admin-error-text" role="status" aria-live="polite"></div>'
-      ].join('');
-
-      document.getElementById('admin-submit-pin-btn')?.addEventListener('click', async () => {
-        const value = (document.getElementById('admin-pin-field')?.value || '').trim();
+      if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
+        body.innerHTML = `
+          <div class="admin-lock-intro">
+            <h4>Cloudflare admin access required</h4>
+            <p>This shared admin panel runs on the Cloudflare Pages deployment. GitHub Pages and local file previews cannot authenticate administrators or publish global settings.</p>
+          </div>`;
+        return;
+      }
+      body.innerHTML = `
+        <div class="admin-lock-intro">
+          <h4>Administrator sign-in</h4>
+          <p>Sign in using the server-configured admin credential. Successful sign-in creates a short-lived secure session.</p>
+        </div>
+        <div class="pin-input-group">
+          <label class="sr-only" for="admin-pin-field">Admin PIN</label>
+          <input type="password" id="admin-pin-field" class="pin-input" placeholder="Enter administrator PIN" minlength="4" maxlength="128" autocomplete="current-password">
+          <button type="button" class="btn btn-primary" id="admin-submit-pin-btn">Unlock admin</button>
+        </div>
+        <div id="pin-error-msg" class="admin-error-text" role="status" aria-live="polite"></div>`;
+      const submit = document.getElementById('admin-submit-pin-btn');
+      submit?.addEventListener('click', async () => {
+        const pin = document.getElementById('admin-pin-field')?.value || '';
         const message = document.getElementById('pin-error-msg');
-        if (!window.crypto?.subtle) { message.textContent = 'Secure PIN setup requires HTTPS in a modern browser.'; return; }
-        if (isFirstSetup) {
-          if (value.length < 8) { message.textContent = 'Use at least 8 characters for your new PIN.'; return; }
-          try { await this.saveLocalAdminPin(value); sound.playChime(); this.renderAdminModalContent(true); showToast('Local admin PIN created.', 'success'); }
-          catch (error) { message.textContent = 'Could not store the PIN securely in this browser.'; }
-          return;
-        }
+        if (!pin) { if (message) message.textContent = 'Enter the administrator PIN.'; return; }
+        submit.disabled = true;
         try {
-          const parts = storedPin.split(':');
-          const digest = parts.length === 2 ? await this.hashLocalAdminPin(value, parts[0]) : '';
-          if (parts.length === 2 && digest === parts[1]) { sound.playChime(); this.renderAdminModalContent(true); showToast('Local admin settings unlocked.', 'success'); }
-          else { sound.playWrong(); message.textContent = 'Incorrect PIN. Please try again.'; }
-        } catch (error) { message.textContent = 'Unable to verify this local PIN in the current browser.'; }
+          const response = await fetch('/api/admin/session', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ pin })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.success) throw new Error(payload.error || 'Administrator sign-in failed.');
+          this.adminSessionActive = true;
+          sound.playChime();
+          this.renderAdminModalContent(true);
+          showToast('Administrator session unlocked.', 'success');
+        } catch (error) {
+          sound.playWrong();
+          if (message) message.textContent = error.message || 'Could not authenticate.';
+        } finally {
+          submit.disabled = false;
+        }
       });
-    } else {
-      if (!this.adminSubTab) this.adminSubTab = 'features';
+      return;
+    }
+
+    if (!['features', 'voice', 'api'].includes(this.adminSubTab)) this.adminSubTab = 'features';
+
 
       const navHtml = `
         <div class="admin-subtab-nav" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:1rem;">
           <button class="btn ${this.adminSubTab === 'features' ? 'btn-primary' : 'btn-secondary'}" id="admin-subtab-features" style="padding:0.35rem 0.75rem; font-size:0.8rem; font-weight:700;">
             ⚙️ Version & Feature Toggles
-          </button>
-          <button class="btn ${this.adminSubTab === 'verification' ? 'btn-primary' : 'btn-secondary'}" id="admin-subtab-verification" style="padding:0.35rem 0.75rem; font-size:0.8rem; font-weight:700;">
-            🛡️ Parent Verifications (${(this.state.kidScoreVerifications || []).filter(v => !v.verified).length})
           </button>
           <button class="btn ${this.adminSubTab === 'voice' ? 'btn-primary' : 'btn-secondary'}" id="admin-subtab-voice" style="padding:0.35rem 0.75rem; font-size:0.8rem; font-weight:700;">
             🗣️ TTS & Voice Router
@@ -8837,13 +8659,6 @@ Guidelines:
               </label>
             </div>
             <div class="toggle-row">
-              <span id="lbl-toggle-indiaMap">🗺️ India Fusion Map & City Quests</span>
-              <label class="switch">
-                <input type="checkbox" id="toggle-indiaMap" aria-labelledby="lbl-toggle-indiaMap" ${this.state.gameToggles.indiaMap !== false ? 'checked' : ''} />
-                <span class="slider" aria-hidden="true"></span>
-              </label>
-            </div>
-            <div class="toggle-row">
               <span id="lbl-toggle-hotPotato">🥔 Hot Potato Rush (Arcade Cooking)</span>
               <label class="switch">
                 <input type="checkbox" id="toggle-hotPotato" aria-labelledby="lbl-toggle-hotPotato" ${this.state.gameToggles.hotPotato !== false ? 'checked' : ''} />
@@ -8862,13 +8677,6 @@ Guidelines:
           <!-- Granular Feature Sub-Toggles -->
           <h4 style="font-size:0.9rem; margin:0 0 0.5rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Granular Modular Sub-Toggles</h4>
           <div class="admin-toggles-list" style="margin-bottom:1.25rem;">
-            <div class="toggle-row">
-              <span id="lbl-toggle-v2-header-lb">🏆 Header Leaderboard Pill</span>
-              <label class="switch">
-                <input type="checkbox" id="toggle-v2-header-lb" aria-labelledby="lbl-toggle-v2-header-lb" ${v2.leaderboardInHeader !== false ? 'checked' : ''} />
-                <span class="slider" aria-hidden="true"></span>
-              </label>
-            </div>
             <div class="toggle-row">
               <span id="lbl-toggle-v2-fusion-tab">🌍 Fusion Explorer Tab</span>
               <label class="switch">
@@ -8913,63 +8721,16 @@ Guidelines:
             </div>
           </div>
 
-          <!-- AI Engine & API Key Setup -->
-          <div class="admin-ai-config-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.4rem;">
-              <div style="display:flex; align-items:center; gap:0.5rem;">
-                <span style="font-size:1.2rem;">🤖</span>
-                <strong style="font-size:0.95rem;">Gemini & Workers AI Setup</strong>
-              </div>
-              <span id="admin-ai-status-pill" class="pill-badge" style="background:${this.getGeminiKey() ? 'rgba(34, 197, 94, 0.15)' : (this.getWorkersAiKey() ? 'rgba(2, 132, 199, 0.15)' : 'var(--bg-card-subtle)')}; color:${this.getGeminiKey() ? 'var(--accent-green)' : (this.getWorkersAiKey() ? 'var(--primary)' : 'var(--text-muted)')}; border-color:${this.getGeminiKey() ? 'var(--accent-green)' : (this.getWorkersAiKey() ? 'var(--primary)' : 'var(--border-color)')}; font-size:0.75rem;">
-                ${this.getGeminiKey() ? '🟢 Gemini API Active' : (this.getWorkersAiKey() ? '⚡ Workers AI Active' : '⚪ Smart Offline Mode')}
-              </span>
-            </div>
-
-            <!-- Google Gemini API Key -->
-            <div style="margin-bottom:0.85rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; flex-wrap:wrap; gap:0.3rem;">
-                <span style="font-weight:700; font-size:0.82rem;">Google Gemini API Key:</span>
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="font-size:0.76rem; color:var(--primary); font-weight:700;">
-                  Get Free Key from Google AI Studio ↗
-                </a>
-              </div>
-              <div class="api-key-input-row" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-                <input type="password" id="admin-gemini-key-input" class="api-key-input" placeholder="Paste AI Studio API key (AIzaSy...)" value="${this.getGeminiKey()}" style="flex:1 1 180px; min-width:0;">
-                <button class="icon-btn" id="admin-show-hide-key-btn" title="Toggle visibility" style="width:34px; height:34px; font-size:0.9rem; flex-shrink:0;">👁️</button>
-                <button class="btn btn-primary" id="admin-save-gemini-key-btn" style="padding:0.35rem 0.85rem; font-size:0.8rem; flex-shrink:0;">Save Key</button>
-              </div>
-            </div>
-
-            <!-- Cloudflare Workers AI Token -->
-            <div style="border-top:1px dashed var(--border-color); padding-top:0.75rem;">
-              <span style="font-weight:700; font-size:0.82rem; display:block; margin-bottom:0.35rem;">⚡ Or Cloudflare Workers AI (Alternative):</span>
-              <div style="display:flex; flex-direction:column; gap:0.4rem;">
-                <input type="password" id="admin-workers-token-input" class="api-key-input" placeholder="Cloudflare API Token with Workers AI Read" value="${this.getWorkersAiKey()}">
-                <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-                  <input type="text" id="admin-workers-account-input" class="api-key-input" placeholder="Cloudflare Account ID" value="${this.getWorkersAiAccount()}" style="flex:1 1 180px; min-width:0;">
-                  <button class="btn btn-secondary" id="admin-save-workers-btn" style="padding:0.35rem 0.85rem; font-size:0.8rem; flex-shrink:0;">Save Workers AI</button>
-                </div>
-              </div>
-            </div>
-
-            ${(this.getGeminiKey() || this.getWorkersAiKey()) ? `
-              <div style="margin-top:0.65rem; text-align:right;">
-                <button id="admin-clear-ai-keys-btn" style="font-size:0.75rem; color:#EF4444; background:none; border:none; cursor:pointer; text-decoration:underline;">
-                  Remove Stored AI Credentials
-                </button>
-              </div>
-            ` : ''}
+          <div class="admin-ai-config-card" style="margin-bottom:1rem;">
+            <strong style="display:block; margin-bottom:.35rem;">🔐 AI provider credentials</strong>
+            <p style="font-size:.82rem; line-height:1.55; color:var(--text-muted); margin:0;">
+              Provider secrets belong in Cloudflare Pages → Settings → Variables and Secrets, never in browser storage or public configuration.
+            </p>
           </div>
 
-          <!-- Admin PIN lives in Cloudflare Secrets, never browser storage. -->
-          <div style="background:var(--bg-parchment); border:1.5px solid var(--border-color); border-radius:var(--radius-sm); padding:0.95rem; margin-bottom:1.25rem;">
-            <label style="font-size:0.82rem; font-weight:800; color:var(--text-muted); display:block; margin-bottom:0.35rem;">
-              Change local admin PIN:
-            </label>
-            <div style="display:flex; gap:0.5rem;">
-              <input type="password" id="new-admin-pin" class="pin-input" style="padding:0.45rem 0.75rem; font-size:0.9rem;" placeholder="New PIN (8+ characters)" minlength="8" maxlength="64" />
-              <button class="btn btn-secondary" id="save-new-pin-btn" style="padding:0.45rem 0.85rem; font-size:0.82rem;">Update PIN</button>
-            </div>
+          <div class="admin-ai-config-card" style="margin-bottom:1rem;">
+            <strong style="display:block; margin-bottom:.35rem;">🔒 Server-side administrator security</strong>
+            <p style="font-size:.82rem; line-height:1.55; color:var(--text-muted); margin:0;">Set <code>ADMIN_PIN</code> and <code>ADMIN_SESSION_SECRET</code> in Cloudflare Pages secrets. This browser never stores or changes the administrator credential.</p>
           </div>
 
           <!-- Data Safety, Backup & Recovery Hub (FF-01) -->
@@ -9013,88 +8774,26 @@ Guidelines:
 
         // Version switcher clicks
         body.querySelectorAll('.admin-version-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             sound.playClick();
-            const ver = btn.getAttribute('data-ver');
-            this.state.appVersion = ver;
-            this.saveState();
-            this.applyV2FeatureVisibility();
-            showToast(`Switched architecture to ${ver.toUpperCase()}`, 'info');
-            this.renderAdminModalContent(true);
-          });
-        });
-
-      } else if (this.adminSubTab === 'verification') {
-        const list = this.state.kidScoreVerifications || [];
-        body.innerHTML = `
-          ${navHtml}
-          <div style="background:var(--accent-green-light); border:1.5px solid var(--accent-green); border-radius:var(--radius-sm); padding:0.85rem; margin-bottom:1.25rem;">
-            <strong style="color:var(--accent-green); font-size:0.95rem;">🛡️ Parent Physical Score Verification Queue</strong>
-            <p style="font-size:0.82rem; color:var(--text-muted); margin:0.3rem 0 0;">
-              Review and certify high scores submitted by kid chefs in the living room before granting the official Verified Badge on global leaderboards.
-            </p>
-          </div>
-
-          <div style="display:flex; flex-direction:column; gap:0.75rem;">
-            ${list.length === 0 ? '<p style="text-align:center; color:var(--text-muted);">No score submissions in verification queue.</p>' : ''}
-            ${list.map((item, idx) => `
-              <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:0.85rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-                <div>
-                  <strong style="font-size:0.92rem; display:block;">${item.playerName}</strong>
-                  <span style="font-size:0.78rem; color:var(--text-muted);">Game: <strong>${item.game}</strong> • Score: <strong>${item.score} pts</strong></span>
-                  <div style="font-size:0.74rem; color:var(--text-muted); margin-top:0.2rem;">Submitted: ${new Date(item.timestamp).toLocaleString()}</div>
-                </div>
-                <div>
-                  ${item.verified ? `
-                    <span class="pill-badge" style="background:#10B981; color:#FFF; font-weight:800; font-size:0.78rem;">
-                      ✅ Verified by ${item.verifiedBy || 'Parent'}
-                    </span>
-                  ` : `
-                    <div style="display:flex; gap:0.4rem;">
-                      <button class="btn btn-primary approve-score-btn" data-idx="${idx}" style="padding:0.35rem 0.75rem; font-size:0.78rem;">
-                        Approve & Verify
-                      </button>
-                      <button class="btn btn-secondary reject-score-btn" data-idx="${idx}" style="padding:0.35rem 0.75rem; font-size:0.78rem; color:#EF4444;">
-                        Reject
-                      </button>
-                    </div>
-                  `}
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        `;
-
-        body.querySelectorAll('.approve-score-btn').forEach(b => {
-          b.addEventListener('click', () => {
-            const idx = parseInt(b.getAttribute('data-idx'), 10);
-            if (this.state.kidScoreVerifications[idx]) {
-              sound.playCorrect();
-              this.state.kidScoreVerifications[idx].verified = true;
-              this.state.kidScoreVerifications[idx].verifiedBy = this.state.profiles.parent?.name || 'Chef Parent';
+            const previousVersion = this.state.appVersion;
+            this.state.appVersion = btn.getAttribute('data-ver');
+            try {
+              await this.saveGlobalAdminConfig();
               this.saveState();
-              this.renderLeaderboard();
-              showToast('Score certified & verified for leaderboard!', 'success');
+              this.applyV2FeatureVisibility();
+              showToast(`Architecture ${this.state.appVersion.toUpperCase()} published globally.`, 'success');
               this.renderAdminModalContent(true);
-            }
-          });
-        });
-
-        body.querySelectorAll('.reject-score-btn').forEach(b => {
-          b.addEventListener('click', () => {
-            const idx = parseInt(b.getAttribute('data-idx'), 10);
-            if (this.state.kidScoreVerifications[idx]) {
-              sound.playWrong();
-              this.state.kidScoreVerifications.splice(idx, 1);
-              this.saveState();
-              showToast('Score submission rejected', 'info');
+            } catch (error) {
+              this.state.appVersion = previousVersion;
+              showToast(error.message || 'Could not publish the version preset.', 'error');
               this.renderAdminModalContent(true);
             }
           });
         });
 
       } else if (this.adminSubTab === 'voice') {
-        const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D', elevenLabsKey: '' };
+        const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D' };
         body.innerHTML = `
           ${navHtml}
           <div style="background:var(--accent-green-light); border:1.5px solid var(--accent-green); border-radius:var(--radius-sm); padding:0.85rem; margin-bottom:1.25rem;">
@@ -9124,15 +8823,13 @@ Guidelines:
               <select id="tts-voice-select" style="width:100%; padding:0.45rem 0.75rem; border-radius:var(--radius-sm); border:1px solid var(--border-color); background:var(--bg-card); color:var(--text-main); font-size:0.88rem;">
                 <option value="en-IN-Wavenet-D" ${tts.voiceId === 'en-IN-Wavenet-D' ? 'selected' : ''}>🇮🇳 Indian English (Professional Chef — Wavenet-D)</option>
                 <option value="hi-IN-Swara" ${tts.voiceId === 'hi-IN-Swara' ? 'selected' : ''}>🇮🇳 Hindi / Hinglish (Warm Desi Rasoi — Swara)</option>
-                <option value="en-IN-Standard-B" ${tts.voiceId === 'en-IN-Standard-B' ? 'selected' : ''}>🇮🇳 Indian English (Kid Friendly Guide — Standard-B)</option>
+                <option value="en-IN-Standard-B" ${tts.voiceId === 'en-IN-Standard-B' ? 'selected' : ''}>🇮🇳 Indian English (Clear Guide Voice — Standard-B)</option>
               </select>
             </div>
 
-            <div style="margin-bottom:1rem;">
-              <label style="font-size:0.82rem; font-weight:700; color:var(--text-muted); display:block; margin-bottom:0.3rem;">
-                ElevenLabs Secret API Key (Optional):
-              </label>
-              <input type="password" id="tts-elevenlabs-key" class="api-key-input" placeholder="sk_... (ElevenLabs API Key)" value="${tts.elevenLabsKey || ''}">
+            <div class="admin-ai-config-card" style="margin-bottom:1rem;">
+              <strong style="display:block; margin-bottom:.3rem;">🔐 Neural voice credentials</strong>
+              <p style="font-size:.8rem; line-height:1.5; color:var(--text-muted); margin:0;">Configure <code>ELEVENLABS_API_KEY</code> and optionally <code>ELEVENLABS_VOICE_ID</code> as Cloudflare secrets. The key is never entered into or stored by this browser.</p>
             </div>
 
             <div style="display:flex; gap:0.5rem;">
@@ -9162,7 +8859,7 @@ Guidelines:
         body.querySelector('#btn-save-tts-config')?.addEventListener('click', () => {
           sound.playCorrect();
           tts.voiceId = body.querySelector('#tts-voice-select')?.value || 'en-IN-Wavenet-D';
-          tts.elevenLabsKey = body.querySelector('#tts-elevenlabs-key')?.value.trim() || '';
+          delete tts.elevenLabsKey;
           this.state.ttsConfig = tts;
           this.saveState();
           showToast('Voice & TTS Router settings saved!', 'success');
@@ -9172,10 +8869,6 @@ Guidelines:
       // Nav Tab Clicks
       body.querySelector('#admin-subtab-features')?.addEventListener('click', () => {
         this.adminSubTab = 'features';
-        this.renderAdminModalContent(true);
-      });
-      body.querySelector('#admin-subtab-verification')?.addEventListener('click', () => {
-        this.adminSubTab = 'verification';
         this.renderAdminModalContent(true);
       });
       body.querySelector('#admin-subtab-voice')?.addEventListener('click', () => {
@@ -9188,104 +8881,58 @@ Guidelines:
       });
 
       if (this.adminSubTab === 'features') {
-        // Admin show/hide Gemini key
-        const adminKeyInput = document.getElementById('admin-gemini-key-input');
-        const adminShowHideBtn = document.getElementById('admin-show-hide-key-btn');
-        adminShowHideBtn?.addEventListener('click', () => {
-          if (adminKeyInput.type === 'password') {
-            adminKeyInput.type = 'text';
-            adminShowHideBtn.innerText = '🙈';
-          } else {
-            adminKeyInput.type = 'password';
-            adminShowHideBtn.innerText = '👁️';
-          }
-        });
+        // Site-wide feature toggles are published to the shared D1 configuration.
 
-        // Admin save Gemini key
-        document.getElementById('admin-save-gemini-key-btn')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          const val = adminKeyInput.value.trim();
-          this.setGeminiKey(val);
-          sound.playCorrect();
-          showToast(val ? 'Google Gemini API key saved!' : 'Gemini key cleared', 'success');
-          this.renderAdminModalContent(true);
-        });
-
-        // Admin save Workers AI config
-        document.getElementById('admin-save-workers-btn')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          const token = document.getElementById('admin-workers-token-input')?.value.trim();
-          const accountId = document.getElementById('admin-workers-account-input')?.value.trim();
-          this.setWorkersAiConfig(token, accountId);
-          sound.playCorrect();
-          showToast(token ? 'Cloudflare Workers AI configured!' : 'Workers AI config removed', 'success');
-          this.renderAdminModalContent(true);
-        });
-
-        // Admin clear AI credentials
-        document.getElementById('admin-clear-ai-keys-btn')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          if (confirm('Clear all stored AI API keys? The app will use instant offline responses.')) {
-            this.setGeminiKey('');
-            this.setWorkersAiConfig('', '');
-            sound.playClick();
-            showToast('Stored AI keys cleared', 'info');
-            this.renderAdminModalContent(true);
-          }
-        });
-
-        // Change the browser-local interface PIN.
-        document.getElementById('save-new-pin-btn')?.addEventListener('click', async () => {
-          const newPin = document.getElementById('new-admin-pin')?.value.trim();
-          if (newPin && newPin.length >= 8) {
-            try {
-              await this.saveLocalAdminPin(newPin);
-              sound.playCorrect();
-              showToast('Local admin PIN updated.', 'success');
-              document.getElementById('new-admin-pin').value = '';
-            } catch (error) {
-              showToast('Secure local PIN storage is unavailable in this browser.', 'error');
-            }
-          } else {
-            sound.playWrong();
-            showToast('Please use at least 8 characters.', 'error');
-          }
-        });
-
-        // Save toggles
-        document.getElementById('save-admin-settings-btn')?.addEventListener('click', () => {
-          sound.playCorrect();
+        // Save and publish website-wide settings to the shared database.
+        document.getElementById('save-admin-settings-btn')?.addEventListener('click', async (event) => {
+          const saveButton = event.currentTarget;
+          const previous = {
+            appVersion: this.state.appVersion,
+            gameToggles: { ...this.state.gameToggles },
+            v2Features: { ...this.state.v2Features }
+          };
+          if (saveButton) saveButton.disabled = true;
           this.state.gameToggles.buildDish = document.getElementById('toggle-buildDish')?.checked ?? true;
           this.state.gameToggles.pronunciation = document.getElementById('toggle-pronunciation')?.checked ?? true;
           this.state.gameToggles.trivia = document.getElementById('toggle-trivia')?.checked ?? true;
-          this.state.gameToggles.indiaMap = document.getElementById('toggle-indiaMap')?.checked ?? true;
+          this.state.gameToggles.indiaMap = false;
           this.state.gameToggles.hotPotato = document.getElementById('toggle-hotPotato')?.checked ?? true;
           this.state.gameToggles.spinScience = document.getElementById('toggle-spinScience')?.checked ?? true;
-
-          if (!this.state.v2Features) this.state.v2Features = {};
-          this.state.v2Features.leaderboardInHeader = document.getElementById('toggle-v2-header-lb')?.checked ?? true;
-          this.state.v2Features.fusionExplorerTab = document.getElementById('toggle-v2-fusion-tab')?.checked ?? true;
-          this.state.v2Features.tandoorSkewerGame = document.getElementById('toggle-v2-skewer')?.checked ?? true;
-          this.state.v2Features.chefHatCameraFilter = document.getElementById('toggle-v2-camera')?.checked ?? true;
-          this.state.v2Features.faceVectorAntiDuplication = document.getElementById('toggle-v2-face-dupe')?.checked ?? true;
-          this.state.v2Features.pdfPortfolioExport = document.getElementById('toggle-v2-pdf')?.checked ?? true;
-          this.state.v2Features.aiFaceExplainerTour = document.getElementById('toggle-v2-tour')?.checked ?? true;
-
-          this.saveState();
-          this.applyV2FeatureVisibility();
-          this.renderGameTabs();
-          this.renderActiveGame();
-          this.closeAdminModal();
-          showToast('Admin settings & modular toggles applied!', 'success');
+          this.state.v2Features = {
+            ...this.state.v2Features,
+            fusionExplorerTab: document.getElementById('toggle-v2-fusion-tab')?.checked ?? true,
+            tandoorSkewerGame: document.getElementById('toggle-v2-skewer')?.checked ?? true,
+            chefHatCameraFilter: document.getElementById('toggle-v2-camera')?.checked ?? true,
+            faceVectorAntiDuplication: document.getElementById('toggle-v2-face-dupe')?.checked ?? true,
+            pdfPortfolioExport: document.getElementById('toggle-v2-pdf')?.checked ?? true,
+            aiFaceExplainerTour: document.getElementById('toggle-v2-tour')?.checked ?? true
+          };
+          try {
+            await this.saveGlobalAdminConfig();
+            this.saveState();
+            this.applyV2FeatureVisibility();
+            this.renderGameTabs();
+            this.renderActiveGame();
+            this.renderLeaderboard();
+            sound.playCorrect();
+            this.closeAdminModal();
+            showToast('Settings published globally for all visitors.', 'success');
+          } catch (error) {
+            this.state.appVersion = previous.appVersion;
+            this.state.gameToggles = previous.gameToggles;
+            this.state.v2Features = previous.v2Features;
+            this.renderAdminModalContent(true);
+            showToast(error.message || 'Global settings could not be saved.', 'error');
+          } finally {
+            if (saveButton) saveButton.disabled = false;
+          }
         });
 
         // Reset scores
         document.getElementById('reset-scores-btn')?.addEventListener('click', () => {
           if (confirm('Are you sure you want to reset all family scores, streaks, and XP back to apprentice level?')) {
             sound.playWrong();
-            this.state.profiles.kid.xp = 0;
             this.state.profiles.parent.xp = 0;
-            this.state.profiles.kid.streak = 1;
             this.state.profiles.parent.streak = 1;
             this.saveState();
             this.renderProgressStrip();
@@ -9355,26 +9002,30 @@ Guidelines:
           }
         });
 
-        // Reset Admin Defaults
-        document.getElementById('reset-admin-btn')?.addEventListener('click', () => {
-          if (confirm('Clear the local admin PIN and restore all feature defaults?')) {
-            sound.playCorrect();
-            localStorage.removeItem('fusion_admin_pin_v1');
-            this.state.gameToggles = {
-              buildDish: true,
-              pronunciation: true,
-              trivia: true,
-              hotPotato: true,
-              spinScience: true
-            };
-            this.state.v2Features = { ...DEFAULT_STATE.v2Features };
-            this.state.appVersion = DEFAULT_STATE.appVersion;
+        // Publish defaults for every visitor.
+        document.getElementById('reset-admin-btn')?.addEventListener('click', async () => {
+          if (!confirm('Restore and publish the default website-wide feature settings?')) return;
+          const previous = {
+            appVersion: this.state.appVersion,
+            gameToggles: { ...this.state.gameToggles },
+            v2Features: { ...this.state.v2Features }
+          };
+          this.state.gameToggles = { ...DEFAULT_STATE.gameToggles, indiaMap: false };
+          this.state.v2Features = { ...DEFAULT_STATE.v2Features };
+          this.state.appVersion = DEFAULT_STATE.appVersion;
+          try {
+            await this.saveGlobalAdminConfig();
             this.saveState();
             this.applyV2FeatureVisibility();
             this.renderGameTabs();
             this.renderActiveGame();
             this.renderAdminModalContent(true);
-            showToast('Local admin PIN cleared and feature defaults restored.', 'success');
+            showToast('Default website settings published globally.', 'success');
+          } catch (error) {
+            this.state.appVersion = previous.appVersion;
+            this.state.gameToggles = previous.gameToggles;
+            this.state.v2Features = previous.v2Features;
+            showToast(error.message || 'Could not restore global settings.', 'error');
           }
         });
       } else if (this.adminSubTab === 'api') {
@@ -9793,10 +9444,6 @@ Guidelines:
     document.getElementById('profile-modal')?.addEventListener('click', (e) => {
       if (e.target.id === 'profile-modal') this.closeProfileModal();
     });
-    document.getElementById('close-leaderboard-modal-btn')?.addEventListener('click', () => this.closeLeaderboardModal());
-    document.getElementById('leaderboard-modal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'leaderboard-modal') this.closeLeaderboardModal();
-    });
 
     // M-10: Mobile keyboard handling - scroll inputs into view on virtual keyboard appearance
     document.addEventListener('focusin', (e) => {
@@ -9847,15 +9494,7 @@ Guidelines:
       });
     });
 
-    // Header Actions: Camera, Portfolio, and Leaderboard
-    document.getElementById('header-leaderboard-pill')?.addEventListener('click', () => {
-      sound.playClick();
-      this.openLeaderboardModal();
-    });
-    document.getElementById('close-leaderboard-modal-btn')?.addEventListener('click', () => this.closeLeaderboardModal());
-    document.getElementById('leaderboard-modal')?.addEventListener('click', (e) => {
-      if (e.target.id === 'leaderboard-modal') this.closeLeaderboardModal();
-    });
+    // Header actions: camera and portfolio.
     document.getElementById('open-camera-scanner-btn')?.addEventListener('click', () => this.openCameraScannerModal());
     document.getElementById('close-camera-modal-btn')?.addEventListener('click', () => this.closeCameraScannerModal());
     document.getElementById('camera-scanner-modal')?.addEventListener('click', (e) => {
@@ -10253,18 +9892,22 @@ Guidelines:
       <div class="model-3d-hint" style="bottom:4.8rem;">💡 Click "Roast on Charcoal" to lower skewer. Click "Roll 90°" to cook all 4 sides evenly!</div>
     `;
 
-    const width = container.clientWidth || 800;
-    const height = container.clientHeight || 260;
+    const width = container.clientWidth || 900;
+    const height = container.clientHeight || 420;
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x07080D);
 
-    const camera = new THREE.PerspectiveCamera(44, width / height, 0.1, 1000);
-    camera.position.set(0, 72, 148);
-    camera.lookAt(0, -6, 0);
+    const isMobileStage = width < 640;
+    const camera = new THREE.PerspectiveCamera(isMobileStage ? 52 : 44, width / height, 0.1, 1100);
+    camera.position.set(0, isMobileStage ? 104 : 72, isMobileStage ? 268 : 158);
+    camera.lookAt(0, isMobileStage ? -8 : -6, 0);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileStage ? 1.4 : 2));
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
     renderer.setSize(width, height);
     renderer.domElement.style.width = '100%';
     renderer.domElement.style.height = '100%';
@@ -10450,6 +10093,34 @@ Guidelines:
     });
     const smokePoints = new THREE.Points(smokeGeo, smokeMat);
     scene.add(smokePoints);
+
+    // Soft volumetric-looking smoke plumes use layered radial sprites for a fuller hearth.
+    const smokeCanvas = document.createElement('canvas');
+    smokeCanvas.width = smokeCanvas.height = 128;
+    const smokeContext = smokeCanvas.getContext('2d');
+    const smokeGradient = smokeContext.createRadialGradient(64, 64, 5, 64, 64, 62);
+    smokeGradient.addColorStop(0, 'rgba(235,228,218,0.48)');
+    smokeGradient.addColorStop(0.42, 'rgba(193,185,176,0.25)');
+    smokeGradient.addColorStop(0.78, 'rgba(145,139,135,0.08)');
+    smokeGradient.addColorStop(1, 'rgba(100,98,100,0)');
+    smokeContext.fillStyle = smokeGradient;
+    smokeContext.fillRect(0, 0, 128, 128);
+    const smokeTexture = new THREE.CanvasTexture(smokeCanvas);
+    const smokeSpriteMaterial = new THREE.SpriteMaterial({
+      map: smokeTexture, color: 0xffffff, transparent: true,
+      opacity: 0.24, depthWrite: false, blending: THREE.NormalBlending
+    });
+    const smokePlumes = [];
+    for (let i = 0; i < (width < 640 ? 10 : 18); i++) {
+      const material = smokeSpriteMaterial.clone();
+      const sprite = new THREE.Sprite(material);
+      const scale = 12 + Math.random() * 17;
+      sprite.scale.set(scale, scale * (1.25 + Math.random() * 0.5), 1);
+      sprite.position.set((Math.random() - 0.5) * 36, 28 + Math.random() * 52, (Math.random() - 0.5) * 28);
+      material.opacity = 0.08 + Math.random() * 0.13;
+      scene.add(sprite);
+      smokePlumes.push({ sprite, baseScale: scale, drift: (Math.random() - 0.5) * 0.08, phase: Math.random() * Math.PI * 2 });
+    }
 
     // 5. Procedural Culinary Texture Generator for High Realism
     const createFoodCanvasTexture = (type) => {
@@ -11213,6 +10884,21 @@ Guidelines:
       }
       sparkGeo.attributes.position.needsUpdate = true;
 
+      // Soft smoke sprites rise, widen and fade before gently respawning above the hearth.
+      smokePlumes.forEach((plume, index) => {
+        const sprite = plume.sprite;
+        sprite.position.y += (0.13 + (index % 4) * 0.025) * heatMultiplier * roastBoost;
+        sprite.position.x += plume.drift + Math.sin(time + plume.phase) * 0.035;
+        const age = Math.max(0, Math.min(1, (sprite.position.y - 28) / 66));
+        const swell = 1 + age * 1.5;
+        sprite.scale.set(plume.baseScale * swell, plume.baseScale * swell * 1.45, 1);
+        sprite.material.opacity = (0.06 + Math.sin(time + plume.phase) * 0.025) * (1 - age * 0.62);
+        if (sprite.position.y > 94) {
+          sprite.position.set((Math.random() - 0.5) * 32, 20 + Math.random() * 8, (Math.random() - 0.5) * 24);
+          sprite.material.opacity = 0.1 + Math.random() * 0.1;
+        }
+      });
+
       // Culinary Smoke Puffs Physics
       const sArr = smokeGeo.attributes.position.array;
       for (let i = 0; i < smokeCount; i++) {
@@ -11238,25 +10924,38 @@ Guidelines:
       const w = container.clientWidth;
       const h = container.clientHeight;
       if (w === 0 || h === 0) return;
+      const mobileStage = w < 640;
+      camera.fov = mobileStage ? 52 : 44;
+      camera.position.set(0, mobileStage ? 104 : 72, mobileStage ? 268 : 158);
+      camera.lookAt(0, mobileStage ? -8 : -6, 0);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobileStage ? 1.4 : 2));
       renderer.setSize(w, h, false);
     };
 
+    let tandoorResizeObserver = null;
     if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => handleResize());
-      ro.observe(container);
+      tandoorResizeObserver = new ResizeObserver(() => handleResize());
+      tandoorResizeObserver.observe(container);
     }
 
     this.active3DScenes.set('tandoor', {
       dispose: () => {
         cancelAnimationFrame(animId);
+        tandoorResizeObserver?.disconnect();
         sound.stopContinuousSizzle();
         drippingDrops.forEach(d => {
           scene.remove(d.mesh);
           d.mesh.geometry.dispose();
           d.mesh.material.dispose();
         });
+        smokePlumes.forEach(plume => {
+          scene.remove(plume.sprite);
+          plume.sprite.material.dispose();
+        });
+        smokeTexture.dispose();
+        smokeSpriteMaterial.dispose();
         renderer.dispose();
       },
       setPaused: (p) => {
@@ -11273,190 +10972,444 @@ Guidelines:
     const container = document.getElementById('dish-3d-canvas-container');
     if (!container || !this.threeAvailable) return;
 
-    if (this.active3DScenes.has('dishIngredient')) {
-      const existing = this.active3DScenes.get('dishIngredient');
-      if (existing && existing.dispose) existing.dispose();
-      this.active3DScenes.delete('dishIngredient');
-    }
+    const previous = this.active3DScenes.get('dishIngredient');
+    if (previous?.dispose) previous.dispose();
+    this.active3DScenes.delete('dishIngredient');
 
     container.innerHTML = `
       <div class="model-3d-hud">
         <span class="model-3d-badge" id="dish-3d-badge">🍄 King Oyster Mushroom</span>
-        <span class="model-3d-badge" id="dish-3d-status">Drag to Rotate 360°</span>
+        <span class="model-3d-badge" id="dish-3d-status">Drag to rotate · 360°</span>
       </div>
-      <div class="model-3d-hint">👆 Drag to inspect vegetarian ingredient in 3D</div>
+      <div class="model-3d-hint">Drag to inspect the ingredient · Auto-rotating</div>
     `;
 
-    const width = container.clientWidth || 380;
-    const height = container.clientHeight || 240;
-
+    const width = Math.max(1, container.clientWidth || 420);
+    const height = Math.max(1, container.clientHeight || 280);
+    const isMobile = width < 640;
+    const isDark = this.state.theme === 'dark';
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0e111a);
+    scene.background = new THREE.Color(isDark ? 0x11141c : 0xf1eee8);
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 20, 65);
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 500);
+    camera.position.set(0, 13, isMobile ? 78 : 72);
     camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !isMobile,
+      alpha: false,
+      powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
     renderer.setSize(width, height);
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
-    renderer.domElement.style.display = 'block';
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
+    renderer.shadowMap.enabled = !isMobile;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab;';
     container.insertBefore(renderer.domElement, container.firstChild);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.85);
-    scene.add(ambient);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(40, 50, 40);
-    scene.add(dirLight);
+    const hemi = new THREE.HemisphereLight(0xfff5e7, isDark ? 0x24202a : 0x8a8175, 1.8);
+    scene.add(hemi);
+    const keyLight = new THREE.DirectionalLight(0xfff0d8, 3.1);
+    keyLight.position.set(-32, 42, 34);
+    keyLight.castShadow = !isMobile;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.left = -35;
+    keyLight.shadow.camera.right = 35;
+    keyLight.shadow.camera.top = 35;
+    keyLight.shadow.camera.bottom = -35;
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xc4e5ff, 1.15);
+    fillLight.position.set(34, 14, 18);
+    scene.add(fillLight);
+    const rimLight = new THREE.PointLight(0xffb35c, 1.6, 130);
+    rimLight.position.set(0, 18, -28);
+    scene.add(rimLight);
 
-    let activeMesh = null;
-    let animId = null;
-    let isPaused = false;
-    let isDragging = false;
-    let prevMouseX = 0;
-    let prevMouseY = 0;
+    // A softly lit preparation surface and contact shadow ground the model.
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: isDark ? 0x252833 : 0xd8d0c5,
+      roughness: 0.82,
+      metalness: 0.02
+    });
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(27, 64), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -18;
+    floor.receiveShadow = true;
+    scene.add(floor);
 
-    const createModel = (name) => {
-      const group = new THREE.Group();
-      const n = (name || '').toLowerCase();
+    const ownedTextures = [];
+    const textureCache = new Map();
+    const makeFoodTexture = (key, base, highlight, detail) => {
+      if (textureCache.has(key)) return textureCache.get(key);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(40, 20, 470, 490);
+      gradient.addColorStop(0, highlight);
+      gradient.addColorStop(0.48, base);
+      gradient.addColorStop(1, detail);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 512, 512);
 
-      if (n.includes('mushroom') || n.includes('oyster') || n.includes('shroom')) {
-        // King Oyster Mushroom: Tapered ivory stem + tan cap
-        const stemGeo = new THREE.CylinderGeometry(4.5, 6.5, 20, 24);
-        const stemMat = new THREE.MeshStandardMaterial({ color: 0xf5f3ee, roughness: 0.65 });
-        const stem = new THREE.Mesh(stemGeo, stemMat);
-        stem.position.y = -2;
-        group.add(stem);
-
-        const capGeo = new THREE.SphereGeometry(8, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-        const capMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7 });
-        const cap = new THREE.Mesh(capGeo, capMat);
-        cap.position.y = 8;
-        cap.scale.set(1.2, 0.65, 1.2);
-        group.add(cap);
-      } else if (n.includes('lime') || n.includes('lemon') || n.includes('citrus')) {
-        // Fresh Lime Half: green hemisphere peel + pulp circle
-        const peelGeo = new THREE.SphereGeometry(10, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-        const peelMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.35 });
-        const peel = new THREE.Mesh(peelGeo, peelMat);
-        peel.rotation.x = Math.PI;
-        group.add(peel);
-
-        const pulpGeo = new THREE.CircleGeometry(9.8, 24);
-        const pulpMat = new THREE.MeshStandardMaterial({ color: 0xa3e635, roughness: 0.5, side: THREE.DoubleSide });
-        const pulp = new THREE.Mesh(pulpGeo, pulpMat);
-        pulp.rotation.x = -Math.PI / 2;
-        group.add(pulp);
-      } else if (n.includes('chili') || n.includes('mirchi') || n.includes('pepper')) {
-        // Yellow Bhavnagri Chili: curved cone body + green calyx/stem
-        const coneGeo = new THREE.ConeGeometry(5, 22, 20);
-        const coneMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 });
-        const cone = new THREE.Mesh(coneGeo, coneMat);
-        cone.rotation.z = Math.PI * 0.85;
-        group.add(cone);
-
-        const stemGeo = new THREE.CylinderGeometry(1, 1.2, 6, 12);
-        const stemMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.6 });
-        const stem = new THREE.Mesh(stemGeo, stemMat);
-        stem.position.set(-6, 9, 0);
-        stem.rotation.z = -0.4;
-        group.add(stem);
-      } else if (n.includes('paneer') || n.includes('cheese') || n.includes('tofu')) {
-        // Paneer Cube: dairy-white beveled cube
-        const cubeGeo = new THREE.BoxGeometry(14, 14, 14);
-        const cubeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.05 });
-        const cube = new THREE.Mesh(cubeGeo, cubeMat);
-        group.add(cube);
-      } else {
-        // Golden Roasted Seed / Makhana / Chana
-        const seedGeo = new THREE.DodecahedronGeometry(8, 1);
-        const seedMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.8 });
-        const seed = new THREE.Mesh(seedGeo, seedMat);
-        seed.scale.set(1.2, 0.9, 1);
-        group.add(seed);
+      // Fine natural speckling and irregular pores make the surface less synthetic.
+      for (let i = 0; i < 1500; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const radius = 0.25 + Math.random() * 1.65;
+        const alpha = 0.025 + Math.random() * 0.12;
+        ctx.fillStyle = i % 3 === 0
+          ? `rgba(255,255,255,${alpha})`
+          : `rgba(32,20,10,${alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, radius * 1.6, radius, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
       }
 
+      if (key.includes('citrus')) {
+        ctx.strokeStyle = 'rgba(250,255,225,.38)';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 12; i++) {
+          ctx.beginPath();
+          ctx.moveTo(256, 256);
+          ctx.lineTo(256 + Math.cos(i * Math.PI / 6) * 245, 256 + Math.sin(i * Math.PI / 6) * 245);
+          ctx.stroke();
+        }
+      } else if (key.includes('mushroom')) {
+        ctx.strokeStyle = 'rgba(245,232,207,.22)';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 44; i++) {
+          const angle = i * Math.PI / 22;
+          ctx.beginPath();
+          ctx.moveTo(256, 256);
+          ctx.quadraticCurveTo(256 + Math.cos(angle + .12) * 100, 256 + Math.sin(angle + .12) * 100,
+            256 + Math.cos(angle) * 245, 256 + Math.sin(angle) * 245);
+          ctx.stroke();
+        }
+      } else if (key.includes('paneer')) {
+        ctx.fillStyle = 'rgba(255,250,226,.3)';
+        for (let i = 0; i < 150; i++) {
+          ctx.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 3, 1 + Math.random() * 3);
+        }
+      }
+
+      const map = new THREE.CanvasTexture(canvas);
+      map.encoding = THREE.sRGBEncoding;
+      map.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+      const bumpCanvas = document.createElement('canvas');
+      bumpCanvas.width = bumpCanvas.height = 256;
+      const bumpCtx = bumpCanvas.getContext('2d');
+      const bumpImage = bumpCtx.createImageData(256, 256);
+      for (let i = 0; i < bumpImage.data.length; i += 4) {
+        const grain = 105 + Math.floor(Math.random() * 90);
+        bumpImage.data[i] = grain;
+        bumpImage.data[i + 1] = grain;
+        bumpImage.data[i + 2] = grain;
+        bumpImage.data[i + 3] = 255;
+      }
+      bumpCtx.putImageData(bumpImage, 0, 0);
+      const bump = new THREE.CanvasTexture(bumpCanvas);
+      const value = { map, bump };
+      textureCache.set(key, value);
+      ownedTextures.push(map, bump);
+      return value;
+    };
+
+    const makeMaterial = (key, base, highlight, detail, options = {}) => {
+      const textures = makeFoodTexture(key, base, highlight, detail);
+      return new THREE.MeshPhysicalMaterial({
+        map: textures.map,
+        bumpMap: textures.bump,
+        bumpScale: options.bumpScale ?? 0.22,
+        color: 0xffffff,
+        roughness: options.roughness ?? 0.5,
+        metalness: 0.0,
+        clearcoat: options.clearcoat ?? 0.16,
+        clearcoatRoughness: 0.32
+      });
+    };
+
+    const createRoundedPaneer = (material) => {
+      const shape = new THREE.Shape();
+      const radius = 2.0;
+      const size = 8.5;
+      shape.moveTo(-size + radius, -size);
+      shape.lineTo(size - radius, -size);
+      shape.quadraticCurveTo(size, -size, size, -size + radius);
+      shape.lineTo(size, size - radius);
+      shape.quadraticCurveTo(size, size, size - radius, size);
+      shape.lineTo(-size + radius, size);
+      shape.quadraticCurveTo(-size, size, -size, size - radius);
+      shape.lineTo(-size, -size + radius);
+      shape.quadraticCurveTo(-size, -size, -size + radius, -size);
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 14,
+        bevelEnabled: true,
+        bevelSegments: 4,
+        steps: 1,
+        bevelSize: 0.8,
+        bevelThickness: 0.7,
+        curveSegments: 12
+      });
+      geometry.translate(0, 0, -7);
+      geometry.computeVertexNormals();
+      return new THREE.Mesh(geometry, material);
+    };
+
+    const createModel = (ingredientName) => {
+      const group = new THREE.Group();
+      const name = String(ingredientName || '').toLowerCase();
+      const add = (geometry, material, position = [0, 0, 0], scale = [1, 1, 1]) => {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(...position);
+        mesh.scale.set(...scale);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        return mesh;
+      };
+
+      if (name.includes('mushroom') || name.includes('oyster') || name.includes('shroom')) {
+        const stemMat = new THREE.MeshPhysicalMaterial({ color: 0xf1e8d8, roughness: 0.78, bumpScale: 0.12 });
+        const stemProfile = [
+          new THREE.Vector2(0, -14), new THREE.Vector2(4.1, -13.8),
+          new THREE.Vector2(5.0, -10), new THREE.Vector2(4.4, -2),
+          new THREE.Vector2(5.2, 2), new THREE.Vector2(0, 3)
+        ];
+        add(new THREE.LatheGeometry(stemProfile, 48), stemMat, [0, -1, 0]);
+        const capMat = makeMaterial('mushroom-cap', '#9a6b42', '#c18d5b', '#4d3024', { roughness: 0.62, bumpScale: 0.3 });
+        const cap = add(new THREE.SphereGeometry(15, 72, 48, 0, Math.PI * 2, 0, Math.PI / 2), capMat, [0, 7, 0], [1.12, 0.72, 1.08]);
+        cap.rotation.z = -0.08;
+        const underside = new THREE.Mesh(new THREE.CircleGeometry(14.7, 64), new THREE.MeshStandardMaterial({ color: 0xe7d8c5, roughness: 0.82, side: THREE.DoubleSide }));
+        underside.rotation.x = -Math.PI / 2;
+        underside.position.y = 7.05;
+        group.add(underside);
+        const gillMat = new THREE.LineBasicMaterial({ color: 0xbda58e, transparent: true, opacity: 0.68 });
+        for (let i = 0; i < 38; i++) {
+          const angle = i * Math.PI * 2 / 38;
+          const points = [
+            new THREE.Vector3(Math.cos(angle) * 2.1, 7.08, Math.sin(angle) * 2.1),
+            new THREE.Vector3(Math.cos(angle) * 14.2, 7.08, Math.sin(angle) * 14.2)
+          ];
+          group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), gillMat));
+        }
+      } else if (name.includes('lime') || name.includes('lemon') || name.includes('citrus')) {
+        const citrusMat = makeMaterial('citrus-peel', '#79a936', '#c4d85b', '#426c2d', { roughness: 0.38, bumpScale: 0.52, clearcoat: 0.42 });
+        add(new THREE.SphereGeometry(13, 72, 56), citrusMat, [0, 0, 0], [1.18, 0.82, 0.92]);
+        const pith = new THREE.Mesh(new THREE.SphereGeometry(8.2, 48, 32), new THREE.MeshStandardMaterial({ color: 0xe9e1b8, roughness: 0.8 }));
+        pith.scale.set(1.1, 0.8, 0.88);
+        pith.position.set(0, 0, 3.5);
+        group.add(pith);
+        const pulpMat = makeMaterial('citrus-pulp', '#b8cf60', '#f1e9a5', '#7c9c38', { roughness: 0.42, bumpScale: 0.18 });
+        add(new THREE.CircleGeometry(7.8, 64), pulpMat, [0, 0, 8.0]);
+        const stem = add(new THREE.CylinderGeometry(0.45, 0.8, 3.4, 12), new THREE.MeshStandardMaterial({ color: 0x4a6e32, roughness: 0.72 }), [0, 10.2, 0]);
+        stem.rotation.z = 0.25;
+      } else if (name.includes('chili') || name.includes('mirchi') || name.includes('pepper')) {
+        const chiliColor = name.includes('red') ? ['#b81f22', '#e84a36', '#681b17'] : ['#c1a52e', '#efe06a', '#7b6d23'];
+        const chiliMat = makeMaterial('chili-' + chiliColor[0], chiliColor[0], chiliColor[1], chiliColor[2], { roughness: 0.31, bumpScale: 0.12, clearcoat: 0.5 });
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(-14, 10, 0), new THREE.Vector3(-7, 9, 1.2),
+          new THREE.Vector3(1, 5, 1.4), new THREE.Vector3(8, 0, 0.5),
+          new THREE.Vector3(13, -7, 0), new THREE.Vector3(15, -12, -0.3)
+        ]);
+        add(new THREE.TubeGeometry(curve, 64, 4.1, 24, false), chiliMat);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x47743a, roughness: 0.78 });
+        add(new THREE.CylinderGeometry(0.75, 1.3, 5, 16), stemMat, [-14, 11, 0]);
+        for (let i = 0; i < 5; i++) {
+          const leaf = add(new THREE.ConeGeometry(1.45, 5.2, 12), stemMat, [-13 + Math.cos(i * 1.25) * 2, 8.4, Math.sin(i * 1.25) * 2]);
+          leaf.rotation.z = (i - 2) * 0.5;
+        }
+      } else if (name.includes('paneer') || name.includes('cheese') || name.includes('tofu')) {
+        const mat = makeMaterial('paneer-curd', '#f1e5bd', '#fff8e6', '#cfbd92', { roughness: 0.72, bumpScale: 0.26 });
+        const cube = createRoundedPaneer(mat);
+        cube.rotation.set(-0.12, 0.25, 0.09);
+        group.add(cube);
+        const herbs = new THREE.MeshStandardMaterial({ color: 0x536f32, roughness: 0.9 });
+        for (let i = 0; i < 8; i++) {
+          const fleck = add(new THREE.SphereGeometry(0.28 + Math.random() * 0.24, 8, 6), herbs,
+            [(Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13]);
+          fleck.scale.set(1.4, 0.35, 0.9);
+        }
+      } else if (name.includes('onion')) {
+        const outer = makeMaterial('red-onion-skin', '#9f3153', '#e9a1a9', '#5a203f', { roughness: 0.42, bumpScale: 0.18 });
+        const center = new THREE.MeshStandardMaterial({ color: 0xf5dce2, roughness: 0.58, side: THREE.DoubleSide });
+        add(new THREE.TorusGeometry(10, 2.0, 20, 72), outer);
+        add(new THREE.TorusGeometry(6.6, 1.4, 16, 64), center, [0, 0, 0.5]);
+        add(new THREE.TorusGeometry(3.2, 1.0, 16, 48), outer, [0, 0, 0.9]);
+      } else if (name.includes('herb') || name.includes('coriander') || name.includes('mint')) {
+        const leafMat = makeMaterial('fresh-herb-leaf', '#397947', '#79b86a', '#1b4e34', { roughness: 0.66, bumpScale: 0.12 });
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x6d8e50, roughness: 0.8 });
+        for (let i = 0; i < 7; i++) {
+          const angle = i * Math.PI * 2 / 7;
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, -10, 0),
+            new THREE.Vector3(Math.cos(angle) * 4, -2, 1),
+            new THREE.Vector3(Math.cos(angle) * 11, 5 + (i % 2) * 2, Math.sin(angle) * 4)
+          ]);
+          add(new THREE.TubeGeometry(curve, 18, 0.3, 6, false), stemMat);
+          const leaf = add(new THREE.SphereGeometry(5, 32, 20), leafMat,
+            [Math.cos(angle) * 10, 6 + (i % 2) * 2, Math.sin(angle) * 4], [0.95, 0.24, 0.48]);
+          leaf.rotation.z = -angle * 0.6;
+        }
+      } else {
+        const spiceMat = makeMaterial('roasted-spice', '#a65f22', '#e5a64e', '#613516', { roughness: 0.84, bumpScale: 0.5 });
+        for (let i = 0; i < 5; i++) {
+          const radius = 4.4 + Math.random() * 1.9;
+          add(new THREE.SphereGeometry(radius, 36, 24), spiceMat,
+            [(i - 2) * 5.7, Math.sin(i * 2.1) * 3.2, Math.cos(i * 1.6) * 4],
+            [1, 0.82, 0.9]);
+        }
+      }
       return group;
     };
 
-    activeMesh = createModel('King Oyster Mushroom');
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = shadowCanvas.height = 128;
+    const shadowCtx = shadowCanvas.getContext('2d');
+    const shadowGradient = shadowCtx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    shadowGradient.addColorStop(0, 'rgba(0,0,0,.28)');
+    shadowGradient.addColorStop(1, 'rgba(0,0,0,0)');
+    shadowCtx.fillStyle = shadowGradient;
+    shadowCtx.fillRect(0, 0, 128, 128);
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    ownedTextures.push(shadowTexture);
+    const contactShadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(42, 20),
+      new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false, opacity: isDark ? 0.75 : 0.48 })
+    );
+    contactShadow.rotation.x = -Math.PI / 2;
+    contactShadow.position.y = -17.82;
+    scene.add(contactShadow);
+
+    let activeMesh = createModel('King Oyster Mushroom');
     scene.add(activeMesh);
+    let animId = null;
+    let isPaused = false;
+    let isDragging = false;
+    let previousX = 0;
+    let previousY = 0;
+    let pointerId = null;
 
-    container.addEventListener('pointerdown', (e) => {
+    const onPointerDown = (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
       isDragging = true;
-      prevMouseX = e.clientX;
-      prevMouseY = e.clientY;
-    });
-
-    window.addEventListener('pointerup', () => { isDragging = false; });
-    window.addEventListener('pointermove', (e) => {
+      pointerId = event.pointerId;
+      previousX = event.clientX;
+      previousY = event.clientY;
+      renderer.domElement.style.cursor = 'grabbing';
+      if (renderer.domElement.setPointerCapture && pointerId !== undefined) {
+        try { renderer.domElement.setPointerCapture(pointerId); } catch (error) {}
+      }
+    };
+    const onPointerMove = (event) => {
       if (!isDragging || !activeMesh) return;
-      const dx = e.clientX - prevMouseX;
-      const dy = e.clientY - prevMouseY;
-      activeMesh.rotation.y += dx * 0.015;
-      activeMesh.rotation.x += dy * 0.015;
-      prevMouseX = e.clientX;
-      prevMouseY = e.clientY;
-    });
+      const dx = event.clientX - previousX;
+      const dy = event.clientY - previousY;
+      activeMesh.rotation.y += dx * 0.012;
+      activeMesh.rotation.x = THREE.MathUtils.clamp(activeMesh.rotation.x + dy * 0.008, -0.65, 0.65);
+      previousX = event.clientX;
+      previousY = event.clientY;
+    };
+    const onPointerUp = () => {
+      isDragging = false;
+      pointerId = null;
+      renderer.domElement.style.cursor = 'grab';
+    };
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerUp);
+    renderer.domElement.addEventListener('lostpointercapture', onPointerUp);
 
     const animate = () => {
       if (isPaused) return;
       animId = requestAnimationFrame(animate);
-
       if (activeMesh && !isDragging) {
-        activeMesh.rotation.y += 0.012;
-        activeMesh.position.y = Math.sin(Date.now() * 0.002) * 1.5;
+        activeMesh.rotation.y += 0.0035;
+        activeMesh.position.y = Math.sin(Date.now() * 0.0014) * 0.5;
       }
       renderer.render(scene, camera);
     };
-
     animate();
 
     const handleResize = () => {
       const w = container.clientWidth;
       const h = container.clientHeight;
-      if (w === 0 || h === 0) return;
+      if (!w || !h) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, w < 640 ? 1.5 : 2));
     };
-
+    let resizeObserver = null;
     if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => handleResize());
-      ro.observe(container);
+      resizeObserver = new ResizeObserver(handleResize);
+      resizeObserver.observe(container);
     }
+
+    const disposeObject = (root) => {
+      root?.traverse((object) => {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) {
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach(material => material.dispose());
+        }
+      });
+    };
 
     this.active3DScenes.set('dishIngredient', {
       dispose: () => {
         cancelAnimationFrame(animId);
+        resizeObserver?.disconnect();
+        renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+        renderer.domElement.removeEventListener('pointermove', onPointerMove);
+        renderer.domElement.removeEventListener('pointerup', onPointerUp);
+        renderer.domElement.removeEventListener('pointercancel', onPointerUp);
+        renderer.domElement.removeEventListener('lostpointercapture', onPointerUp);
+        disposeObject(activeMesh);
+        ownedTextures.forEach(texture => texture.dispose());
+        floor.geometry.dispose();
+        floor.material.dispose();
+        contactShadow.geometry.dispose();
+        contactShadow.material.dispose();
         renderer.dispose();
+        if (renderer.domElement.parentNode === container) renderer.domElement.remove();
       },
-      setPaused: (p) => {
-        isPaused = p;
-        if (!p) animate();
+      setPaused: (paused) => {
+        isPaused = paused;
+        if (!paused) animate();
+        else cancelAnimationFrame(animId);
       },
       handleResize,
+      setTheme: (theme) => {
+        const dark = theme === 'dark';
+        scene.background.set(dark ? 0x11141c : 0xf1eee8);
+        floor.material.color.setHex(dark ? 0x252833 : 0xd8d0c5);
+        hemi.groundColor.setHex(dark ? 0x24202a : 0x8a8175);
+        contactShadow.material.opacity = dark ? 0.75 : 0.48;
+      },
       updateModel: (ingredientName) => {
-        if (activeMesh) scene.remove(activeMesh);
+        disposeObject(activeMesh);
+        scene.remove(activeMesh);
         activeMesh = createModel(ingredientName);
+        activeMesh.position.y = 0;
         scene.add(activeMesh);
         const badge = container.querySelector('#dish-3d-badge');
-        if (badge) badge.innerText = `🌿 ${ingredientName}`;
+        if (badge) badge.innerText = '🌿 ' + ingredientName;
       },
       animateJump: () => {
         if (!activeMesh) return;
-        let jumpProgress = 0;
-        const jumpInterval = setInterval(() => {
-          jumpProgress += 0.08;
-          activeMesh.position.y = Math.sin(jumpProgress * Math.PI) * 15;
-          activeMesh.rotation.z += 0.25;
-          if (jumpProgress >= 1) {
-            clearInterval(jumpInterval);
-            activeMesh.position.y = 0;
-          }
-        }, 20);
+        const start = performance.now();
+        const initialY = activeMesh.position.y;
+        const jump = (now) => {
+          const progress = Math.min(1, (now - start) / 420);
+          activeMesh.position.y = initialY + Math.sin(progress * Math.PI) * 7;
+          if (progress < 1) requestAnimationFrame(jump);
+          else activeMesh.position.y = initialY;
+        };
+        requestAnimationFrame(jump);
       }
     });
   }
@@ -11726,13 +11679,6 @@ Guidelines:
   applyV2FeatureVisibility() {
     const v2 = this.state.v2Features || {};
     const ver = this.state.appVersion || 'v2';
-
-    // 1. Header Leaderboard Pill
-    const headerLb = document.getElementById('header-leaderboard-pill');
-    if (headerLb) {
-      const showLb = ver !== 'v1' && v2.leaderboardInHeader !== false;
-      headerLb.style.display = showLb ? 'inline-flex' : 'none';
-    }
 
     // 2. Fusion Explorer Navigation Tab & Pane
     const fusionTabBtn = document.getElementById('tab-btn-fusion');
