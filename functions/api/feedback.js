@@ -1,4 +1,5 @@
 // Cloudflare Pages Function: /api/feedback
+import { authorizeApiRequest } from './_api-auth.js';
 // Handles GET (Read feedback list or stats) and POST (Submit new feedback/rating)
 
 function jsonResponse(data, status = 200) {
@@ -29,6 +30,8 @@ async function ensureFeedbackTable(db) {
 // 1. READ ACCESS (GET /api/feedback)
 // ====================================================================
 export async function onRequestGet(context) {
+  const access = await authorizeApiRequest(context, 'read');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
@@ -113,6 +116,8 @@ export async function onRequestGet(context) {
 // 2. WRITE ACCESS (POST /api/feedback)
 // ====================================================================
 export async function onRequestPost(context) {
+  const access = await authorizeApiRequest(context, 'write');
+  if (!access.ok) return access.response;
   const { request, env } = context;
   const db = env?.DB;
 
