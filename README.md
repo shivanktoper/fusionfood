@@ -37,12 +37,12 @@ The Pages workflow deliberately publishes only `index.html`, `bundle.js`, `style
 
 ---
 
-## 🎮 6 Admin-Toggleable Interactive Games
+## 🎮 5 Admin-Toggleable Interactive Games
 
 ### 1. 🥘 Build-a-Dish (Pantry Rush & Recipe Simulation)
 * **Step-by-Step Cooking Lab**: Observe real ingredient transformations through Base Prep, Marinade, Sizzle/Bake, and Garnish phases.
 * **Timed Pantry Rush**: Tap authentic vegetarian ingredients while avoiding non-vegetarian or mismatched impostor ingredients (e.g., fish sauce, blue cheese, raw meat).
-* **Kid & Parent Tags**: Safe steps (whisking, decorating) are flagged for kids, while hot stovetop/oven steps feature parent supervision tags.
+* **Cooking Technique Notes**: Each step includes practical technique guidance and sensible hot-surface safety reminders.
 
 ### 2. 🗣️ Pronunciation Challenge & Phonetic Matching
 * **International Accents**: Master authentic IPA notations and phonetic syllables (`/ti.ɾaˈði.to/` -> *tee-rah-DEE-toh*).
@@ -53,14 +53,9 @@ The Pages workflow deliberately publishes only `index.html`, `bundle.js`, `style
 ### 3. 🧠 Family Tag-Team Trivia Quiz
 * **10 Curated Questions**: Dive into culinary history, Indian bazaar substitutes, and food chemistry.
 * **Gentle Soft Timer**: Earn bonus speed XP without any negative penalties for taking time to discuss.
-* **"Parent Hint" Button**: Brainstorm together with helpful real-world cooking hints.
+* **Chef Hint Button**: Explore helpful real-world cooking and food-science hints.
 
-### 4. 🗺️ India Availability Map & City Quest
-* **Interactive SVG Map**: Explore regional fusion adoption across the cities represented in the map.
-* **Availability Matrix**: Filter dishes by *Emerging/Niche*, *Moderate*, and *High* availability.
-* **Bazaar Quests**: Discover authentic local markets that stock replacement ingredients.
-
-### 5. 🎡 Spin the Wheel & Culinary Food Science
+### 4. 🎡 Spin the Wheel & Culinary Food Science
 * **Dynamic Physics Wheel**: Spin across 6 core food chemistry concepts:
   * *Citrus Acid Denaturation* (How lime juice "cooks" ceviche)
   * *The Maillard Reaction* (The browning chemistry behind tandoor naanzas)
@@ -70,7 +65,7 @@ The Pages workflow deliberately publishes only `index.html`, `bundle.js`, `style
   * *Fat-Soluble Spice Volatiles* (Why tadka in hot oil/ghee awakens spices)
 * **Rapid Science Challenge**: Answer an instant food chemistry mini-question to win +50 Bonus XP!
 
-### 6. 🥔 Hot Potato Rush
+### 5. 🥔 Hot Potato Rush
 * **60-second round**: A fixed countdown is visible during both the standard arena and fullscreen arcade.
 * **Round controls**: Start and replay begin a fresh 60-second session; pausing freezes the standard arena clock and resume continues from the remaining time.
 * **Timed finish**: When the countdown reaches zero, gameplay stops and the final score is presented.
@@ -92,7 +87,7 @@ Every fusion dish includes a full Indian kitchen adaptation:
 ---
 
 ## 🏆 Family Leaderboard & 6-Tier Chef Rank Ladder
-* **Single Adult Chef Profile**: One consistent adult difficulty across the cooking games.
+* **Single Adult Chef Profile**: One consistent adult difficulty across the cooking games, with no child-profile switching.
 * **6 Culinary Ranks**:
   1. *Kitchen Apprentice* (0–250 XP)
   2. *Spice Explorer* (251–600 XP)
@@ -100,7 +95,7 @@ Every fusion dish includes a full Indian kitchen adaptation:
   4. *Fusion Sous Chef* (1101–1700 XP)
   5. *Executive Fusion Master* (1701–2500 XP)
   6. *Michelin Star Sorcerer* (2501+ XP)
-* **Trophy Badges & Streaks**: Daily streak multipliers and personal best tracking saved automatically to `localStorage`.
+* **Trophy Badges & Streaks**: Daily streak multipliers and personal best tracking saved automatically to the visitor's profile.
 
 ---
 
@@ -126,7 +121,9 @@ For Cloudflare Pages, add secrets from **Workers & Pages → your Pages project 
 * `ADMIN_PIN` — the administrator PIN (use a unique, strong value).
 * `ADMIN_SESSION_SECRET` — at least 32 random characters, used to sign sessions.
 
-The project uses the `migrations/` directory for new D1 tables and cleanup operations. Apply migrations to the intended database before deploying the new endpoints.
+The project uses the `migrations/` directory for new D1 tables and cleanup operations. The deployment workflow applies migrations to the `foodfusionweb` D1 database before deploying the Pages app and API Worker.
+
+For optional provider-backed features, configure these as Cloudflare secrets (on both Pages Functions and the standalone Worker when both hosts are used): `GEMINI_API_KEY`, `CLOUDFLARE_AI_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `ELEVENLABS_API_KEY`, and optionally `ELEVENLABS_VOICE_ID`. The app sends prompts and speech text to same-origin API proxies; provider secrets are never stored in local storage or exposed in browser JavaScript.
 
 ## Hot Potato round duration
 
