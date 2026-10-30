@@ -10297,7 +10297,7 @@ Guidelines:
     cameraButton('#tandoor-zoom-in',()=>{cameraDistance=Math.max(230,cameraDistance-28);updateTandoorCamera();});
     cameraButton('#tandoor-zoom-out',()=>{cameraDistance=Math.min(600,cameraDistance+28);updateTandoorCamera();});
     cameraButton('#tandoor-view-reset',()=>{
-      orbitYaw=-.12;orbitPitch=isMobileStage?.38:.28;cameraDistance=isMobileStage?405:335;updateTandoorCamera();
+      orbitYaw=-.12;orbitPitch = isMobileStage ? 0.38 : 0.28;cameraDistance=isMobileStage?405:335;updateTandoorCamera();
     });
     const chooseServingType = type => {
       servingType=type;plateGroup.visible=type==='plate';trayGroup.visible=type==='tray';
@@ -11120,7 +11120,7 @@ Guidelines:
       } else if(name.includes('ginger') || name.includes('garlic')) {
         const bulb=makeMaterial('ginger-garlic','#d6bc8e','#f2e2bb','#92754c',{roughness:.86,bumpScale:.34});
         const garlic=name.includes('garlic');
-        for(let i=0;i<(garlic?7:4);i++){const a=i*Math.PI*2/(garlic?7:4);const clove=add(new THREE.SphereGeometry(garlic?4.8:6.6,28,20),bulb,[Math.cos(a)*(garlic?4:5),(i%3)*2.5-4,Math.sin(a)*(garlic?4:5)]);clove.scale.set(garlic?.76:1.45,.92,.82);}
+        for(let i=0;i<(garlic?7:4);i++){const a=i*Math.PI*2/(garlic?7:4);const clove=add(new THREE.SphereGeometry(garlic?4.8:6.6,28,20),bulb,[Math.cos(a)*(garlic?4:5),(i%3)*2.5-4,Math.sin(a)*(garlic?4:5)]);clove.scale.set(garlic ? 0.76 : 1.45,0.92,0.82);}
       } else if(name.includes('egg')) {
         const white=new THREE.MeshPhysicalMaterial({color:0xfff4df,roughness:.32,clearcoat:.34}),yolk=new THREE.MeshPhysicalMaterial({color:0xe6a52d,roughness:.42});
         add(new THREE.SphereGeometry(12,48,36),white,[0,0,0],[1,.72,.82]);add(new THREE.SphereGeometry(5.1,32,24),yolk,[0,0,9],[1,.9,.35]);
