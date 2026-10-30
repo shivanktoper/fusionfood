@@ -5865,7 +5865,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 /* FusionFood 3D upgrade: roomier, touch-friendly cooking scenes. */
 #tandoor-3d-stage,.tandoor-3d-stage-container{width:100%;max-width:1320px;aspect-ratio:16/10;min-height:460px;max-height:680px;overflow:hidden;isolation:isolate;}
 .tandoor-camera-dock{position:absolute;top:4.4rem;right:.9rem;z-index:14;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:.35rem;max-width:min(46%,310px);pointer-events:auto;}
-.tandoor-camera-dock button,.tandoor-serving-dock button{min-height:38px;min-width:38px;padding:.42rem .68rem;border:1px solid rgba(255,255,255,.22);border-radius:999px;color:#fff;background:rgba(15,23,42,.88);font:800 .76rem/1.1 inherit;box-shadow:0 3px 12px rgba(0,0,0,.22);cursor:pointer;touch-action:manipulation;}
+.tandoor-camera-dock button,.tandoor-serving-dock button{min-height:38px;min-width:38px;padding:.42rem .68rem;border:1px solid rgba(255,255,255,.22);border-radius:999px;color:#fff;background:rgba(15,23,42,.88);font:inherit;font-size:.76rem;font-weight:800;line-height:1.1;box-shadow:0 3px 12px rgba(0,0,0,.22);cursor:pointer;touch-action:manipulation;}
 .tandoor-camera-dock button:hover,.tandoor-serving-dock button:hover,.tandoor-serving-dock button.active{background:linear-gradient(135deg,#b45309,#ea580c);border-color:rgba(255,255,255,.48);}
 .tandoor-serving-dock{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:.35rem;max-width:100%;}
 .tandoor-serving-dock button:last-child{background:linear-gradient(135deg,#059669,#0d9488);}
