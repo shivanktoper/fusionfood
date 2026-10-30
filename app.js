@@ -9332,7 +9332,6 @@ Guidelines:
           this.runApiDiagnosticPing('/api/feedback', out);
         });
       }
-    }
   }
 
   escapeHtml(str) {
