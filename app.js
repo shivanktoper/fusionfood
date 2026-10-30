@@ -9694,100 +9694,64 @@ Guidelines:
       .replace(/'/g, '&#39;');
   }
 
-  generateApiKey(name, scope = 'read_write', expiryDays = 365) {
-    const chars = '0123456789abcdef';
-    let hex = '';
-    for (let i = 0; i < 32; i++) {
-      hex += chars[Math.floor(Math.random() * chars.length)];
-    }
-    let idHex = '';
-    for (let i = 0; i < 8; i++) {
-      idHex += chars[Math.floor(Math.random() * chars.length)];
-    }
+  async generateApiKey(name, scope = 'read_write', expiryDays = 365) {
+    const normalizedName = String(name || 'API Client').trim().slice(0, 100);
+    const normalizedScope = String(scope || 'read_write').trim();
+    const parsedDays = Number.parseInt(expiryDays, 10);
+    const days = expiryDays === undefined || expiryDays === null || expiryDays === '' ? 365 : parsedDays;
 
-    const scopePrefix = scope === 'read' ? 'ro' : (scope === 'admin' ? 'adm' : 'rw');
-    const token = `ff_live_${scopePrefix}_${hex}`;
-    const keyId = `key_${idHex}`;
-    const prefix = `${token.slice(0, 14)}...${token.slice(-4)}`;
-
-    let expiresAt = null;
-    const days = parseInt(expiryDays, 10);
-    if (!isNaN(days) && days > 0) {
-      const exp = new Date();
-      exp.setDate(exp.getDate() + days);
-      expiresAt = exp.toISOString();
+    if (!normalizedName) throw new Error('Enter a name for this API key.');
+    if (!['read', 'read_write', 'admin'].includes(normalizedScope)) throw new Error('Invalid API key scope.');
+    if (!Number.isInteger(days) || days < 0 || days > 3650) {
+      throw new Error('Expiry must be between 0 and 3650 days.');
+    }
+    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
+      throw new Error('API key generation requires the Cloudflare Pages backend. GitHub Pages and offline/local mode cannot create shared API keys.');
     }
 
-    const newKey = {
-      keyId,
-      name: (name || 'API Client').trim(),
-      token,
-      prefix,
-      scope,
-      status: 'active',
-      createdAt: new Date().toISOString(),
-      expiresAt
-    };
-
-    if (!Array.isArray(this.state.apiKeys)) {
-      this.state.apiKeys = [];
-    }
-    this.state.apiKeys.unshift(newKey);
-    this.saveState();
-
-    if (typeof window !== 'undefined' && !isGitHubPagesStaticHost() && window.location.protocol !== 'file:') {
-      fetch('/api/admin/keys', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: normalizedName,
-          scope,
-          expiryDays: Number.isFinite(days) ? days : 0
-        })
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || !result.success || !result.key) {
-        throw new Error(result.error || `API key creation failed (HTTP ${response.status}).`);
-      }
-      newKey = result.key;
+    const response = await fetch('/api/admin/keys', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: normalizedName, scope: normalizedScope, expiryDays: days })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success || !result.key || !result.key.keyId || !result.key.token) {
+      throw new Error(result.error || 'API key creation failed (HTTP ' + response.status + ').');
     }
 
-    if (!Array.isArray(this.state.apiKeys)) this.state.apiKeys = [];
+    const newKey = result.key;
     const { token, ...metadata } = newKey;
+    if (!Array.isArray(this.state.apiKeys)) this.state.apiKeys = [];
+    this.state.apiKeys = this.state.apiKeys.filter(key => key.keyId !== metadata.keyId);
     this.state.apiKeys.unshift(metadata);
     this.saveState();
-    return newKey;
+    // Return the secret once to the UI, but persist only non-secret metadata.
+    return { ...newKey, token };
   }
 
   async revokeApiKey(keyId) {
-    if (typeof window !== 'undefined' && window.location.protocol !== 'file:') {
-      const response = await fetch(`/api/admin/keys?keyId=${encodeURIComponent(keyId)}`, {
+    const normalizedKeyId = String(keyId || '').trim();
+    if (!normalizedKeyId) throw new Error('An API key ID is required.');
+
+    if (typeof window !== 'undefined' && window.location.protocol !== 'file:' && !isGitHubPagesStaticHost()) {
+      const response = await fetch('/api/admin/keys?keyId=' + encodeURIComponent(normalizedKeyId), {
         method: 'DELETE',
         credentials: 'same-origin'
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.success) {
-        throw new Error(result.error || `API key revocation failed (HTTP ${response.status}).`);
+        throw new Error(result.error || 'API key revocation failed (HTTP ' + response.status + ').');
       }
     }
 
     if (!Array.isArray(this.state.apiKeys)) return;
-    const key = this.state.apiKeys.find(item => item.keyId === keyId);
+    const key = this.state.apiKeys.find(item => item.keyId === normalizedKeyId);
     if (key) {
       key.status = 'revoked';
       this.saveState();
-
-      if (typeof window !== 'undefined' && !isGitHubPagesStaticHost() && window.location.protocol !== 'file:') {
-        fetch(`/api/admin/keys?keyId=${encodeURIComponent(keyId)}`, {
-          method: 'DELETE'
-        }).catch(err => {
-          console.warn('Backend API key revocation notice (using local state):', err);
-        });
-      }
     }
   }
-
   async runApiDiagnosticPing(endpoint, outputEl) {
     if (!outputEl) return;
     if (isGitHubPagesStaticHost()) {
