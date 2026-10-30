@@ -8710,9 +8710,6 @@ Guidelines:
           <button class="btn ${this.adminSubTab === 'features' ? 'btn-primary' : 'btn-secondary'}" id="admin-subtab-features" style="padding:0.35rem 0.75rem; font-size:0.8rem; font-weight:700;">
             ⚙️ Version & Feature Toggles
           </button>
-          <button class="btn ${this.adminSubTab === 'verification' ? 'btn-primary' : 'btn-secondary'}" id="admin-subtab-verification" style="padding:0.35rem 0.75rem; font-size:0.8rem; font-weight:700;">
-            🛡️ Parent Verifications (${(this.state.kidScoreVerifications || []).filter(v => !v.verified).length})
-          </button>
           <button class="btn ${this.adminSubTab === 'voice' ? 'btn-primary' : 'btn-secondary'}" id="admin-subtab-voice" style="padding:0.35rem 0.75rem; font-size:0.8rem; font-weight:700;">
             🗣️ TTS & Voice Router
           </button>
@@ -8828,63 +8825,16 @@ Guidelines:
             </div>
           </div>
 
-          <!-- AI Engine & API Key Setup -->
-          <div class="admin-ai-config-card">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; flex-wrap:wrap; gap:0.4rem;">
-              <div style="display:flex; align-items:center; gap:0.5rem;">
-                <span style="font-size:1.2rem;">🤖</span>
-                <strong style="font-size:0.95rem;">Gemini & Workers AI Setup</strong>
-              </div>
-              <span id="admin-ai-status-pill" class="pill-badge" style="background:${this.getGeminiKey() ? 'rgba(34, 197, 94, 0.15)' : (this.getWorkersAiKey() ? 'rgba(2, 132, 199, 0.15)' : 'var(--bg-card-subtle)')}; color:${this.getGeminiKey() ? 'var(--accent-green)' : (this.getWorkersAiKey() ? 'var(--primary)' : 'var(--text-muted)')}; border-color:${this.getGeminiKey() ? 'var(--accent-green)' : (this.getWorkersAiKey() ? 'var(--primary)' : 'var(--border-color)')}; font-size:0.75rem;">
-                ${this.getGeminiKey() ? '🟢 Gemini API Active' : (this.getWorkersAiKey() ? '⚡ Workers AI Active' : '⚪ Smart Offline Mode')}
-              </span>
-            </div>
-
-            <!-- Google Gemini API Key -->
-            <div style="margin-bottom:0.85rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem; flex-wrap:wrap; gap:0.3rem;">
-                <span style="font-weight:700; font-size:0.82rem;">Google Gemini API Key:</span>
-                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="font-size:0.76rem; color:var(--primary); font-weight:700;">
-                  Get Free Key from Google AI Studio ↗
-                </a>
-              </div>
-              <div class="api-key-input-row" style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-                <input type="password" id="admin-gemini-key-input" class="api-key-input" placeholder="Paste AI Studio API key (AIzaSy...)" value="${this.getGeminiKey()}" style="flex:1 1 180px; min-width:0;">
-                <button class="icon-btn" id="admin-show-hide-key-btn" title="Toggle visibility" style="width:34px; height:34px; font-size:0.9rem; flex-shrink:0;">👁️</button>
-                <button class="btn btn-primary" id="admin-save-gemini-key-btn" style="padding:0.35rem 0.85rem; font-size:0.8rem; flex-shrink:0;">Save Key</button>
-              </div>
-            </div>
-
-            <!-- Cloudflare Workers AI Token -->
-            <div style="border-top:1px dashed var(--border-color); padding-top:0.75rem;">
-              <span style="font-weight:700; font-size:0.82rem; display:block; margin-bottom:0.35rem;">⚡ Or Cloudflare Workers AI (Alternative):</span>
-              <div style="display:flex; flex-direction:column; gap:0.4rem;">
-                <input type="password" id="admin-workers-token-input" class="api-key-input" placeholder="Cloudflare API Token with Workers AI Read" value="${this.getWorkersAiKey()}">
-                <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
-                  <input type="text" id="admin-workers-account-input" class="api-key-input" placeholder="Cloudflare Account ID" value="${this.getWorkersAiAccount()}" style="flex:1 1 180px; min-width:0;">
-                  <button class="btn btn-secondary" id="admin-save-workers-btn" style="padding:0.35rem 0.85rem; font-size:0.8rem; flex-shrink:0;">Save Workers AI</button>
-                </div>
-              </div>
-            </div>
-
-            ${(this.getGeminiKey() || this.getWorkersAiKey()) ? `
-              <div style="margin-top:0.65rem; text-align:right;">
-                <button id="admin-clear-ai-keys-btn" style="font-size:0.75rem; color:#EF4444; background:none; border:none; cursor:pointer; text-decoration:underline;">
-                  Remove Stored AI Credentials
-                </button>
-              </div>
-            ` : ''}
+          <div class="admin-ai-config-card" style="margin-bottom:1rem;">
+            <strong style="display:block; margin-bottom:.35rem;">🔐 AI provider credentials</strong>
+            <p style="font-size:.82rem; line-height:1.55; color:var(--text-muted); margin:0;">
+              Provider secrets belong in Cloudflare Pages → Settings → Variables and Secrets, never in browser storage or public configuration.
+            </p>
           </div>
 
-          <!-- Admin PIN lives in Cloudflare Secrets, never browser storage. -->
-          <div style="background:var(--bg-parchment); border:1.5px solid var(--border-color); border-radius:var(--radius-sm); padding:0.95rem; margin-bottom:1.25rem;">
-            <label style="font-size:0.82rem; font-weight:800; color:var(--text-muted); display:block; margin-bottom:0.35rem;">
-              Change local admin PIN:
-            </label>
-            <div style="display:flex; gap:0.5rem;">
-              <input type="password" id="new-admin-pin" class="pin-input" style="padding:0.45rem 0.75rem; font-size:0.9rem;" placeholder="New PIN (8+ characters)" minlength="8" maxlength="64" />
-              <button class="btn btn-secondary" id="save-new-pin-btn" style="padding:0.45rem 0.85rem; font-size:0.82rem;">Update PIN</button>
-            </div>
+          <div class="admin-ai-config-card" style="margin-bottom:1rem;">
+            <strong style="display:block; margin-bottom:.35rem;">🔒 Server-side administrator security</strong>
+            <p style="font-size:.82rem; line-height:1.55; color:var(--text-muted); margin:0;">Set <code>ADMIN_PIN</code> and <code>ADMIN_SESSION_SECRET</code> in Cloudflare Pages secrets. This browser never stores or changes the administrator credential.</p>
           </div>
 
           <!-- Data Safety, Backup & Recovery Hub (FF-01) -->
@@ -8928,87 +8878,25 @@ Guidelines:
 
         // Version switcher clicks
         body.querySelectorAll('.admin-version-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             sound.playClick();
-            const ver = btn.getAttribute('data-ver');
-            this.state.appVersion = ver;
-            this.saveState();
-            this.applyV2FeatureVisibility();
-            showToast(`Switched architecture to ${ver.toUpperCase()}`, 'info');
-            this.renderAdminModalContent(true);
-          });
-        });
-
-      } else if (this.adminSubTab === 'verification') {
-        const list = this.state.kidScoreVerifications || [];
-        body.innerHTML = `
-          ${navHtml}
-          <div style="background:var(--accent-green-light); border:1.5px solid var(--accent-green); border-radius:var(--radius-sm); padding:0.85rem; margin-bottom:1.25rem;">
-            <strong style="color:var(--accent-green); font-size:0.95rem;">🛡️ Parent Physical Score Verification Queue</strong>
-            <p style="font-size:0.82rem; color:var(--text-muted); margin:0.3rem 0 0;">
-              Review and certify high scores submitted by kid chefs in the living room before granting the official Verified Badge on global leaderboards.
-            </p>
-          </div>
-
-          <div style="display:flex; flex-direction:column; gap:0.75rem;">
-            ${list.length === 0 ? '<p style="text-align:center; color:var(--text-muted);">No score submissions in verification queue.</p>' : ''}
-            ${list.map((item, idx) => `
-              <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:var(--radius-sm); padding:0.85rem; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-                <div>
-                  <strong style="font-size:0.92rem; display:block;">${item.playerName}</strong>
-                  <span style="font-size:0.78rem; color:var(--text-muted);">Game: <strong>${item.game}</strong> • Score: <strong>${item.score} pts</strong></span>
-                  <div style="font-size:0.74rem; color:var(--text-muted); margin-top:0.2rem;">Submitted: ${new Date(item.timestamp).toLocaleString()}</div>
-                </div>
-                <div>
-                  ${item.verified ? `
-                    <span class="pill-badge" style="background:#10B981; color:#FFF; font-weight:800; font-size:0.78rem;">
-                      ✅ Verified by ${item.verifiedBy || 'Parent'}
-                    </span>
-                  ` : `
-                    <div style="display:flex; gap:0.4rem;">
-                      <button class="btn btn-primary approve-score-btn" data-idx="${idx}" style="padding:0.35rem 0.75rem; font-size:0.78rem;">
-                        Approve & Verify
-                      </button>
-                      <button class="btn btn-secondary reject-score-btn" data-idx="${idx}" style="padding:0.35rem 0.75rem; font-size:0.78rem; color:#EF4444;">
-                        Reject
-                      </button>
-                    </div>
-                  `}
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        `;
-
-        body.querySelectorAll('.approve-score-btn').forEach(b => {
-          b.addEventListener('click', () => {
-            const idx = parseInt(b.getAttribute('data-idx'), 10);
-            if (this.state.kidScoreVerifications[idx]) {
-              sound.playCorrect();
-              this.state.kidScoreVerifications[idx].verified = true;
-              this.state.kidScoreVerifications[idx].verifiedBy = this.state.profiles.parent?.name || 'Chef Parent';
+            const previousVersion = this.state.appVersion;
+            this.state.appVersion = btn.getAttribute('data-ver');
+            try {
+              await this.saveGlobalAdminConfig();
               this.saveState();
-              this.renderLeaderboard();
-              showToast('Score certified & verified for leaderboard!', 'success');
+              this.applyV2FeatureVisibility();
+              showToast(`Architecture ${this.state.appVersion.toUpperCase()} published globally.`, 'success');
+              this.renderAdminModalContent(true);
+            } catch (error) {
+              this.state.appVersion = previousVersion;
+              showToast(error.message || 'Could not publish the version preset.', 'error');
               this.renderAdminModalContent(true);
             }
           });
         });
 
-        body.querySelectorAll('.reject-score-btn').forEach(b => {
-          b.addEventListener('click', () => {
-            const idx = parseInt(b.getAttribute('data-idx'), 10);
-            if (this.state.kidScoreVerifications[idx]) {
-              sound.playWrong();
-              this.state.kidScoreVerifications.splice(idx, 1);
-              this.saveState();
-              showToast('Score submission rejected', 'info');
-              this.renderAdminModalContent(true);
-            }
-          });
-        });
-
-      } else if (this.adminSubTab === 'voice') {
+      } else if (this.adminSubTab === 'voice') {      } else if (this.adminSubTab === 'voice') {
         const tts = this.state.ttsConfig || { provider: 'browser', voiceId: 'en-IN-Wavenet-D', elevenLabsKey: '' };
         body.innerHTML = `
           ${navHtml}
@@ -9089,10 +8977,6 @@ Guidelines:
         this.adminSubTab = 'features';
         this.renderAdminModalContent(true);
       });
-      body.querySelector('#admin-subtab-verification')?.addEventListener('click', () => {
-        this.adminSubTab = 'verification';
-        this.renderAdminModalContent(true);
-      });
       body.querySelector('#admin-subtab-voice')?.addEventListener('click', () => {
         this.adminSubTab = 'voice';
         this.renderAdminModalContent(true);
@@ -9103,94 +8987,51 @@ Guidelines:
       });
 
       if (this.adminSubTab === 'features') {
-        // Admin show/hide Gemini key
-        const adminKeyInput = document.getElementById('admin-gemini-key-input');
-        const adminShowHideBtn = document.getElementById('admin-show-hide-key-btn');
-        adminShowHideBtn?.addEventListener('click', () => {
-          if (adminKeyInput.type === 'password') {
-            adminKeyInput.type = 'text';
-            adminShowHideBtn.innerText = '🙈';
-          } else {
-            adminKeyInput.type = 'password';
-            adminShowHideBtn.innerText = '👁️';
-          }
-        });
+        // Site-wide feature toggles are published to the shared D1 configuration.
 
-        // Admin save Gemini key
-        document.getElementById('admin-save-gemini-key-btn')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          const val = adminKeyInput.value.trim();
-          this.setGeminiKey(val);
-          sound.playCorrect();
-          showToast(val ? 'Google Gemini API key saved!' : 'Gemini key cleared', 'success');
-          this.renderAdminModalContent(true);
-        });
-
-        // Admin save Workers AI config
-        document.getElementById('admin-save-workers-btn')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          const token = document.getElementById('admin-workers-token-input')?.value.trim();
-          const accountId = document.getElementById('admin-workers-account-input')?.value.trim();
-          this.setWorkersAiConfig(token, accountId);
-          sound.playCorrect();
-          showToast(token ? 'Cloudflare Workers AI configured!' : 'Workers AI config removed', 'success');
-          this.renderAdminModalContent(true);
-        });
-
-        // Admin clear AI credentials
-        document.getElementById('admin-clear-ai-keys-btn')?.addEventListener('click', (e) => {
-          e.preventDefault();
-          if (confirm('Clear all stored AI API keys? The app will use instant offline responses.')) {
-            this.setGeminiKey('');
-            this.setWorkersAiConfig('', '');
-            sound.playClick();
-            showToast('Stored AI keys cleared', 'info');
-            this.renderAdminModalContent(true);
-          }
-        });
-
-        // Change the browser-local interface PIN.
-        document.getElementById('save-new-pin-btn')?.addEventListener('click', async () => {
-          const newPin = document.getElementById('new-admin-pin')?.value.trim();
-          if (newPin && newPin.length >= 8) {
-            try {
-              await this.saveLocalAdminPin(newPin);
-              sound.playCorrect();
-              showToast('Local admin PIN updated.', 'success');
-              document.getElementById('new-admin-pin').value = '';
-            } catch (error) {
-              showToast('Secure local PIN storage is unavailable in this browser.', 'error');
-            }
-          } else {
-            sound.playWrong();
-            showToast('Please use at least 8 characters.', 'error');
-          }
-        });
-
-        // Save toggles
-        document.getElementById('save-admin-settings-btn')?.addEventListener('click', () => {
-          sound.playCorrect();
+        // Save and publish website-wide settings to the shared database.
+        document.getElementById('save-admin-settings-btn')?.addEventListener('click', async (event) => {
+          const saveButton = event.currentTarget;
+          const previous = {
+            appVersion: this.state.appVersion,
+            gameToggles: { ...this.state.gameToggles },
+            v2Features: { ...this.state.v2Features }
+          };
+          if (saveButton) saveButton.disabled = true;
           this.state.gameToggles.buildDish = document.getElementById('toggle-buildDish')?.checked ?? true;
           this.state.gameToggles.pronunciation = document.getElementById('toggle-pronunciation')?.checked ?? true;
           this.state.gameToggles.trivia = document.getElementById('toggle-trivia')?.checked ?? true;
           this.state.gameToggles.indiaMap = false;
           this.state.gameToggles.hotPotato = document.getElementById('toggle-hotPotato')?.checked ?? true;
           this.state.gameToggles.spinScience = document.getElementById('toggle-spinScience')?.checked ?? true;
-
-          if (!this.state.v2Features) this.state.v2Features = {};
-          this.state.v2Features.fusionExplorerTab = document.getElementById('toggle-v2-fusion-tab')?.checked ?? true;
-          this.state.v2Features.tandoorSkewerGame = document.getElementById('toggle-v2-skewer')?.checked ?? true;
-          this.state.v2Features.chefHatCameraFilter = document.getElementById('toggle-v2-camera')?.checked ?? true;
-          this.state.v2Features.faceVectorAntiDuplication = document.getElementById('toggle-v2-face-dupe')?.checked ?? true;
-          this.state.v2Features.pdfPortfolioExport = document.getElementById('toggle-v2-pdf')?.checked ?? true;
-          this.state.v2Features.aiFaceExplainerTour = document.getElementById('toggle-v2-tour')?.checked ?? true;
-
-          this.saveState();
-          this.applyV2FeatureVisibility();
-          this.renderGameTabs();
-          this.renderActiveGame();
-          this.closeAdminModal();
-          showToast('Admin settings & modular toggles applied!', 'success');
+          this.state.v2Features = {
+            ...this.state.v2Features,
+            fusionExplorerTab: document.getElementById('toggle-v2-fusion-tab')?.checked ?? true,
+            tandoorSkewerGame: document.getElementById('toggle-v2-skewer')?.checked ?? true,
+            chefHatCameraFilter: document.getElementById('toggle-v2-camera')?.checked ?? true,
+            faceVectorAntiDuplication: document.getElementById('toggle-v2-face-dupe')?.checked ?? true,
+            pdfPortfolioExport: document.getElementById('toggle-v2-pdf')?.checked ?? true,
+            aiFaceExplainerTour: document.getElementById('toggle-v2-tour')?.checked ?? true
+          };
+          try {
+            await this.saveGlobalAdminConfig();
+            this.saveState();
+            this.applyV2FeatureVisibility();
+            this.renderGameTabs();
+            this.renderActiveGame();
+            this.renderLeaderboard();
+            sound.playCorrect();
+            this.closeAdminModal();
+            showToast('Settings published globally for all visitors.', 'success');
+          } catch (error) {
+            this.state.appVersion = previous.appVersion;
+            this.state.gameToggles = previous.gameToggles;
+            this.state.v2Features = previous.v2Features;
+            this.renderAdminModalContent(true);
+            showToast(error.message || 'Global settings could not be saved.', 'error');
+          } finally {
+            if (saveButton) saveButton.disabled = false;
+          }
         });
 
         // Reset scores
@@ -9269,29 +9110,33 @@ Guidelines:
           }
         });
 
-        // Reset Admin Defaults
-        document.getElementById('reset-admin-btn')?.addEventListener('click', () => {
-          if (confirm('Clear the local admin PIN and restore all feature defaults?')) {
-            sound.playCorrect();
-            localStorage.removeItem('fusion_admin_pin_v1');
-            this.state.gameToggles = {
-              buildDish: true,
-              pronunciation: true,
-              trivia: true,
-              hotPotato: true,
-              spinScience: true
-            };
-            this.state.v2Features = { ...DEFAULT_STATE.v2Features };
-            this.state.appVersion = DEFAULT_STATE.appVersion;
+        // Publish defaults for every visitor.
+        document.getElementById('reset-admin-btn')?.addEventListener('click', async () => {
+          if (!confirm('Restore and publish the default website-wide feature settings?')) return;
+          const previous = {
+            appVersion: this.state.appVersion,
+            gameToggles: { ...this.state.gameToggles },
+            v2Features: { ...this.state.v2Features }
+          };
+          this.state.gameToggles = { ...DEFAULT_STATE.gameToggles, indiaMap: false };
+          this.state.v2Features = { ...DEFAULT_STATE.v2Features };
+          this.state.appVersion = DEFAULT_STATE.appVersion;
+          try {
+            await this.saveGlobalAdminConfig();
             this.saveState();
             this.applyV2FeatureVisibility();
             this.renderGameTabs();
             this.renderActiveGame();
             this.renderAdminModalContent(true);
-            showToast('Local admin PIN cleared and feature defaults restored.', 'success');
+            showToast('Default website settings published globally.', 'success');
+          } catch (error) {
+            this.state.appVersion = previous.appVersion;
+            this.state.gameToggles = previous.gameToggles;
+            this.state.v2Features = previous.v2Features;
+            showToast(error.message || 'Could not restore global settings.', 'error');
           }
         });
-      } else if (this.adminSubTab === 'api') {
+      } else if (this.adminSubTab === 'api') {      } else if (this.adminSubTab === 'api') {
         if (isGitHubPagesStaticHost()) {
           body.innerHTML = `
             <div class="admin-ai-config-card">
