@@ -4410,7 +4410,7 @@ class FusionApp {
   }
 
   getActiveProfile() {
-    return this.state.profiles[this.state.currentProfile] || this.state.profiles.kid;
+    return this.state.profiles[this.state.currentProfile] || this.state.profiles.parent;
   }
 
   getDifficultySettings() {
@@ -8556,7 +8556,18 @@ Guidelines:
     if (!modal) return;
     modal.classList.add('open');
     document.body.classList.add('has-modal-open');
+    this.adminSessionActive = false;
     this.renderAdminModalContent(false);
+    if (window.location.protocol === 'file:' || isGitHubPagesStaticHost()) return;
+    fetch('/api/admin/session', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async response => {
+        const payload = await response.json().catch(() => ({}));
+        if (response.ok && payload.success && payload.authenticated) {
+          this.adminSessionActive = true;
+          this.renderAdminModalContent(true);
+        }
+      })
+      .catch(() => {});
   }
 
   closeAdminModal() {
@@ -8575,17 +8586,67 @@ Guidelines:
     }
   }
 
-  async hashLocalAdminPin(pin, saltHex) {
-    const salt = Uint8Array.from((saltHex.match(/.{2}/g) || []), pair => parseInt(pair, 16));
-    const key = await window.crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
-    const bits = await window.crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 120000, hash: 'SHA-256' }, key, 256);
-    return Array.from(new Uint8Array(bits), byte => byte.toString(16).padStart(2, '0')).join('');
+  applyGlobalAdminConfig(config) {
+    if (!config || typeof config !== 'object') return false;
+    if (['v1', 'v2', 'v3'].includes(config.appVersion)) this.state.appVersion = config.appVersion;
+    const currentGames = this.state.gameToggles || {};
+    this.state.gameToggles = { ...currentGames, ...(config.gameToggles || {}), indiaMap: false };
+    const currentFeatures = this.state.v2Features || {};
+    this.state.v2Features = { ...currentFeatures, ...(config.v2Features || {}) };
+    delete this.state.v2Features.leaderboardInHeader;
+    if (this.state.activeGameTab === 'indiaMap') this.state.activeGameTab = 'buildDish';
+    return true;
   }
 
-  async saveLocalAdminPin(pin) {
-    const salt = Array.from(window.crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('');
-    const digest = await this.hashLocalAdminPin(pin, salt);
-    localStorage.setItem('fusion_admin_pin_v1', salt + ':' + digest);
+  async loadGlobalAdminConfig() {
+    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) return false;
+    try {
+      const response = await fetch('/api/config', { credentials: 'same-origin', cache: 'no-store' });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload.success || !this.applyGlobalAdminConfig(payload.config)) return false;
+      this.applyV2FeatureVisibility();
+      this.renderGameTabs();
+      this.renderActiveGame();
+      this.renderLeaderboard();
+      return true;
+    } catch (error) {
+      console.warn('Global site settings could not be loaded:', error);
+      return false;
+    }
+  }
+
+  async saveGlobalAdminConfig() {
+    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
+      throw new Error('Global settings require the Cloudflare Pages backend.');
+    }
+    const config = {
+      appVersion: this.state.appVersion,
+      gameToggles: {
+        buildDish: this.state.gameToggles.buildDish !== false,
+        pronunciation: this.state.gameToggles.pronunciation !== false,
+        trivia: this.state.gameToggles.trivia !== false,
+        hotPotato: this.state.gameToggles.hotPotato !== false,
+        spinScience: this.state.gameToggles.spinScience !== false,
+        indiaMap: false
+      },
+      v2Features: {
+        fusionExplorerTab: this.state.v2Features?.fusionExplorerTab !== false,
+        tandoorSkewerGame: this.state.v2Features?.tandoorSkewerGame !== false,
+        chefHatCameraFilter: this.state.v2Features?.chefHatCameraFilter !== false,
+        faceVectorAntiDuplication: this.state.v2Features?.faceVectorAntiDuplication !== false,
+        pdfPortfolioExport: this.state.v2Features?.pdfPortfolioExport !== false,
+        aiFaceExplainerTour: this.state.v2Features?.aiFaceExplainerTour !== false
+      }
+    };
+    const response = await fetch('/api/admin/config', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify({ config })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload.success) throw new Error(payload.error || 'Could not publish shared settings.');
+    return payload.config;
   }
 
   renderAdminModalContent(isAuthenticated = false) {
@@ -8593,41 +8654,56 @@ Guidelines:
     if (!body) return;
 
     if (!isAuthenticated) {
-      const storedPin = localStorage.getItem('fusion_admin_pin_v1');
-      const isFirstSetup = !storedPin;
-      body.innerHTML = [
-        '<div class="admin-lock-intro">',
-        '<h4>' + (isFirstSetup ? 'Create a local admin PIN' : 'Unlock local admin settings') + '</h4>',
-        '<p>' + (isFirstSetup ? 'Set a new PIN for this browser. The old default credential has been retired.' : 'Enter the PIN configured on this device.') + '</p>',
-        '<p class="admin-lock-note">This is a local interface lock only. It does not authenticate or protect server-side database operations.</p>',
-        '</div>',
-        '<div class="pin-input-group">',
-        '<label class="sr-only" for="admin-pin-field">' + (isFirstSetup ? 'Create admin PIN' : 'Admin PIN') + '</label>',
-        '<input type="password" id="admin-pin-field" class="pin-input" placeholder="' + (isFirstSetup ? 'Create an 8+ character PIN' : 'Enter local PIN') + '" minlength="8" maxlength="64" autocomplete="current-password" />',
-        '<button type="button" class="btn btn-primary" id="admin-submit-pin-btn">' + (isFirstSetup ? 'Save PIN' : 'Unlock') + '</button>',
-        '</div>',
-        '<div id="pin-error-msg" class="admin-error-text" role="status" aria-live="polite"></div>'
-      ].join('');
-
-      document.getElementById('admin-submit-pin-btn')?.addEventListener('click', async () => {
-        const value = (document.getElementById('admin-pin-field')?.value || '').trim();
+      if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
+        body.innerHTML = `
+          <div class="admin-lock-intro">
+            <h4>Cloudflare admin access required</h4>
+            <p>This shared admin panel runs on the Cloudflare Pages deployment. GitHub Pages and local file previews cannot authenticate administrators or publish global settings.</p>
+          </div>`;
+        return;
+      }
+      body.innerHTML = `
+        <div class="admin-lock-intro">
+          <h4>Administrator sign-in</h4>
+          <p>Sign in using the server-configured admin credential. Successful sign-in creates a short-lived secure session.</p>
+        </div>
+        <div class="pin-input-group">
+          <label class="sr-only" for="admin-pin-field">Admin PIN</label>
+          <input type="password" id="admin-pin-field" class="pin-input" placeholder="Enter administrator PIN" minlength="4" maxlength="128" autocomplete="current-password">
+          <button type="button" class="btn btn-primary" id="admin-submit-pin-btn">Unlock admin</button>
+        </div>
+        <div id="pin-error-msg" class="admin-error-text" role="status" aria-live="polite"></div>`;
+      const submit = document.getElementById('admin-submit-pin-btn');
+      submit?.addEventListener('click', async () => {
+        const pin = document.getElementById('admin-pin-field')?.value || '';
         const message = document.getElementById('pin-error-msg');
-        if (!window.crypto?.subtle) { message.textContent = 'Secure PIN setup requires HTTPS in a modern browser.'; return; }
-        if (isFirstSetup) {
-          if (value.length < 8) { message.textContent = 'Use at least 8 characters for your new PIN.'; return; }
-          try { await this.saveLocalAdminPin(value); sound.playChime(); this.renderAdminModalContent(true); showToast('Local admin PIN created.', 'success'); }
-          catch (error) { message.textContent = 'Could not store the PIN securely in this browser.'; }
-          return;
-        }
+        if (!pin) { if (message) message.textContent = 'Enter the administrator PIN.'; return; }
+        submit.disabled = true;
         try {
-          const parts = storedPin.split(':');
-          const digest = parts.length === 2 ? await this.hashLocalAdminPin(value, parts[0]) : '';
-          if (parts.length === 2 && digest === parts[1]) { sound.playChime(); this.renderAdminModalContent(true); showToast('Local admin settings unlocked.', 'success'); }
-          else { sound.playWrong(); message.textContent = 'Incorrect PIN. Please try again.'; }
-        } catch (error) { message.textContent = 'Unable to verify this local PIN in the current browser.'; }
+          const response = await fetch('/api/admin/session', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify({ pin })
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok || !payload.success) throw new Error(payload.error || 'Administrator sign-in failed.');
+          this.adminSessionActive = true;
+          sound.playChime();
+          this.renderAdminModalContent(true);
+          showToast('Administrator session unlocked.', 'success');
+        } catch (error) {
+          sound.playWrong();
+          if (message) message.textContent = error.message || 'Could not authenticate.';
+        } finally {
+          submit.disabled = false;
+        }
       });
-    } else {
-      if (!this.adminSubTab) this.adminSubTab = 'features';
+      return;
+    }
+
+    if (!['features', 'voice', 'api'].includes(this.adminSubTab)) this.adminSubTab = 'features';
+
 
       const navHtml = `
         <div class="admin-subtab-nav" style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-bottom:1rem;">
