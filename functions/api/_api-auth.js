@@ -21,7 +21,8 @@ function sameOriginRequest(request) {
       return false;
     }
   }
-  return request.headers.get("Sec-Fetch-Site") === "same-origin";
+  const site = request.headers.get("Sec-Fetch-Site");
+  return site === "same-origin" || site === "none";
 }
 
 export async function authorizeApiRequest(context, requiredScope = "read") {
