@@ -92,7 +92,7 @@ Every fusion dish includes a full Indian kitchen adaptation:
 ---
 
 ## 🏆 Family Leaderboard & 6-Tier Chef Rank Ladder
-* **Switchable Profiles**: Toggle between **Kid Chef Maya** 🧒 and **Parent Sous-Chef** 👨‍🍳 with one click.
+* **Single Adult Chef Profile**: One consistent adult difficulty across the cooking games.
 * **6 Culinary Ranks**:
   1. *Kitchen Apprentice* (0–250 XP)
   2. *Spice Explorer* (251–600 XP)
@@ -105,12 +105,11 @@ Every fusion dish includes a full Indian kitchen adaptation:
 ---
 
 ## Admin Controls
-* Open **Tools → Admin Settings** from the site header.
-* On first use, create a browser-local PIN of at least 8 characters. The PIN is stored as a salted PBKDF2-derived hash.
-* This is a **local interface lock only**. It does not secure Cloudflare D1 data, API routes, or other server-side operations.
-* Toggle which of the 6 games appear and manage local family settings.
 
----
+* Open **Tools → Admin Settings** from the site header.
+* Admin sign-in is verified on the server. The session is held in a short-lived, signed, `HttpOnly`, `Secure`, `SameSite=Strict` cookie; no browser-local PIN is used.
+* Configure `ADMIN_PIN` and a random `ADMIN_SESSION_SECRET` of at least 32 characters as Cloudflare Pages secrets. Admin feature/version settings are saved in D1 and loaded by every visitor.
+* The **API Key Generator** issues scoped `ff_live_...` tokens for `/api/leaderboard` and `/api/feedback`. `read` keys can call GET; `read_write` and `admin` keys can call GET and POST. Only a SHA-256 token hash is stored in D1; the raw token is displayed once at creation.
 
 ## 🎨 Visual & Audio System
 * **Warm Illustrated Cookbook Styling**: Tactile cream/parchment background, terracotta saffron accents, and recipe tape accents.
@@ -120,9 +119,14 @@ Every fusion dish includes a full Indian kitchen adaptation:
 
 ## Admin and trust notes
 
-The application no longer ships a default administrator PIN or seeded API-token examples. On first use, an administrator creates a browser-local PIN; it is stored as a salted PBKDF2-derived hash. This is a **local interface lock only**, not server-side authentication and not a security boundary for server data or API operations. Do not store production secrets in browser code or local storage.
+Production administrator credentials are Cloudflare secrets, never frontend code or browser storage. Admin sessions are signed, short-lived cookies. Generated API tokens are stored as SHA-256 hashes and should be copied securely when first displayed. Global site settings live in the shared D1 database; personal profile details, progress and theme choices remain local to each browser.
 
-The sample family testimonials and sample score-verification entries have been removed. Ratings now show an empty state until visitors post real feedback.
+For Cloudflare Pages, add secrets from **Workers & Pages → your Pages project → Settings → Variables and Secrets**:
+
+* `ADMIN_PIN` — the administrator PIN (use a unique, strong value).
+* `ADMIN_SESSION_SECRET` — at least 32 random characters, used to sign sessions.
+
+The project uses the `migrations/` directory for new D1 tables and cleanup operations. Apply migrations to the intended database before deploying the new endpoints.
 
 ## Hot Potato round duration
 
