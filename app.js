@@ -11018,190 +11018,437 @@ Guidelines:
     const container = document.getElementById('dish-3d-canvas-container');
     if (!container || !this.threeAvailable) return;
 
-    if (this.active3DScenes.has('dishIngredient')) {
-      const existing = this.active3DScenes.get('dishIngredient');
-      if (existing && existing.dispose) existing.dispose();
-      this.active3DScenes.delete('dishIngredient');
-    }
+    const previous = this.active3DScenes.get('dishIngredient');
+    if (previous?.dispose) previous.dispose();
+    this.active3DScenes.delete('dishIngredient');
 
     container.innerHTML = `
       <div class="model-3d-hud">
         <span class="model-3d-badge" id="dish-3d-badge">🍄 King Oyster Mushroom</span>
-        <span class="model-3d-badge" id="dish-3d-status">Drag to Rotate 360°</span>
+        <span class="model-3d-badge" id="dish-3d-status">Drag to rotate · 360°</span>
       </div>
-      <div class="model-3d-hint">👆 Drag to inspect vegetarian ingredient in 3D</div>
+      <div class="model-3d-hint">Drag to inspect the ingredient · Auto-rotating</div>
     `;
 
-    const width = container.clientWidth || 380;
-    const height = container.clientHeight || 240;
-
+    const width = Math.max(1, container.clientWidth || 420);
+    const height = Math.max(1, container.clientHeight || 280);
+    const isMobile = width < 640;
+    const isDark = this.state.theme === 'dark';
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0e111a);
+    scene.background = new THREE.Color(isDark ? 0x11141c : 0xf1eee8);
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
-    camera.position.set(0, 20, 65);
+    const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 500);
+    camera.position.set(0, 13, isMobile ? 78 : 72);
     camera.lookAt(0, 0, 0);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !isMobile,
+      alpha: false,
+      powerPreference: 'high-performance'
+    });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.5 : 2));
     renderer.setSize(width, height);
-    renderer.domElement.style.width = '100%';
-    renderer.domElement.style.height = '100%';
-    renderer.domElement.style.display = 'block';
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.18;
+    renderer.shadowMap.enabled = !isMobile;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab;';
     container.insertBefore(renderer.domElement, container.firstChild);
 
-    const ambient = new THREE.AmbientLight(0xffffff, 0.85);
-    scene.add(ambient);
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
-    dirLight.position.set(40, 50, 40);
-    scene.add(dirLight);
+    const hemi = new THREE.HemisphereLight(0xfff5e7, isDark ? 0x24202a : 0x8a8175, 1.8);
+    scene.add(hemi);
+    const keyLight = new THREE.DirectionalLight(0xfff0d8, 3.1);
+    keyLight.position.set(-32, 42, 34);
+    keyLight.castShadow = !isMobile;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.left = -35;
+    keyLight.shadow.camera.right = 35;
+    keyLight.shadow.camera.top = 35;
+    keyLight.shadow.camera.bottom = -35;
+    scene.add(keyLight);
+    const fillLight = new THREE.DirectionalLight(0xc4e5ff, 1.15);
+    fillLight.position.set(34, 14, 18);
+    scene.add(fillLight);
+    const rimLight = new THREE.PointLight(0xffb35c, 1.6, 130);
+    rimLight.position.set(0, 18, -28);
+    scene.add(rimLight);
 
-    let activeMesh = null;
-    let animId = null;
-    let isPaused = false;
-    let isDragging = false;
-    let prevMouseX = 0;
-    let prevMouseY = 0;
+    // A softly lit preparation surface and contact shadow ground the model.
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: isDark ? 0x252833 : 0xd8d0c5,
+      roughness: 0.82,
+      metalness: 0.02
+    });
+    const floor = new THREE.Mesh(new THREE.CircleGeometry(27, 64), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -18;
+    floor.receiveShadow = true;
+    scene.add(floor);
 
-    const createModel = (name) => {
-      const group = new THREE.Group();
-      const n = (name || '').toLowerCase();
+    const ownedTextures = [];
+    const textureCache = new Map();
+    const makeFoodTexture = (key, base, highlight, detail) => {
+      if (textureCache.has(key)) return textureCache.get(key);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+      const gradient = ctx.createLinearGradient(40, 20, 470, 490);
+      gradient.addColorStop(0, highlight);
+      gradient.addColorStop(0.48, base);
+      gradient.addColorStop(1, detail);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 512, 512);
 
-      if (n.includes('mushroom') || n.includes('oyster') || n.includes('shroom')) {
-        // King Oyster Mushroom: Tapered ivory stem + tan cap
-        const stemGeo = new THREE.CylinderGeometry(4.5, 6.5, 20, 24);
-        const stemMat = new THREE.MeshStandardMaterial({ color: 0xf5f3ee, roughness: 0.65 });
-        const stem = new THREE.Mesh(stemGeo, stemMat);
-        stem.position.y = -2;
-        group.add(stem);
-
-        const capGeo = new THREE.SphereGeometry(8, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-        const capMat = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7 });
-        const cap = new THREE.Mesh(capGeo, capMat);
-        cap.position.y = 8;
-        cap.scale.set(1.2, 0.65, 1.2);
-        group.add(cap);
-      } else if (n.includes('lime') || n.includes('lemon') || n.includes('citrus')) {
-        // Fresh Lime Half: green hemisphere peel + pulp circle
-        const peelGeo = new THREE.SphereGeometry(10, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2);
-        const peelMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.35 });
-        const peel = new THREE.Mesh(peelGeo, peelMat);
-        peel.rotation.x = Math.PI;
-        group.add(peel);
-
-        const pulpGeo = new THREE.CircleGeometry(9.8, 24);
-        const pulpMat = new THREE.MeshStandardMaterial({ color: 0xa3e635, roughness: 0.5, side: THREE.DoubleSide });
-        const pulp = new THREE.Mesh(pulpGeo, pulpMat);
-        pulp.rotation.x = -Math.PI / 2;
-        group.add(pulp);
-      } else if (n.includes('chili') || n.includes('mirchi') || n.includes('pepper')) {
-        // Yellow Bhavnagri Chili: curved cone body + green calyx/stem
-        const coneGeo = new THREE.ConeGeometry(5, 22, 20);
-        const coneMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.3 });
-        const cone = new THREE.Mesh(coneGeo, coneMat);
-        cone.rotation.z = Math.PI * 0.85;
-        group.add(cone);
-
-        const stemGeo = new THREE.CylinderGeometry(1, 1.2, 6, 12);
-        const stemMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.6 });
-        const stem = new THREE.Mesh(stemGeo, stemMat);
-        stem.position.set(-6, 9, 0);
-        stem.rotation.z = -0.4;
-        group.add(stem);
-      } else if (n.includes('paneer') || n.includes('cheese') || n.includes('tofu')) {
-        // Paneer Cube: dairy-white beveled cube
-        const cubeGeo = new THREE.BoxGeometry(14, 14, 14);
-        const cubeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.05 });
-        const cube = new THREE.Mesh(cubeGeo, cubeMat);
-        group.add(cube);
-      } else {
-        // Golden Roasted Seed / Makhana / Chana
-        const seedGeo = new THREE.DodecahedronGeometry(8, 1);
-        const seedMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.8 });
-        const seed = new THREE.Mesh(seedGeo, seedMat);
-        seed.scale.set(1.2, 0.9, 1);
-        group.add(seed);
+      // Fine natural speckling and irregular pores make the surface less synthetic.
+      for (let i = 0; i < 1500; i++) {
+        const x = Math.random() * 512;
+        const y = Math.random() * 512;
+        const radius = 0.25 + Math.random() * 1.65;
+        const alpha = 0.025 + Math.random() * 0.12;
+        ctx.fillStyle = i % 3 === 0
+          ? `rgba(255,255,255,${alpha})`
+          : `rgba(32,20,10,${alpha})`;
+        ctx.beginPath();
+        ctx.ellipse(x, y, radius * 1.6, radius, Math.random() * Math.PI, 0, Math.PI * 2);
+        ctx.fill();
       }
 
+      if (key.includes('citrus')) {
+        ctx.strokeStyle = 'rgba(250,255,225,.38)';
+        ctx.lineWidth = 3;
+        for (let i = 0; i < 12; i++) {
+          ctx.beginPath();
+          ctx.moveTo(256, 256);
+          ctx.lineTo(256 + Math.cos(i * Math.PI / 6) * 245, 256 + Math.sin(i * Math.PI / 6) * 245);
+          ctx.stroke();
+        }
+      } else if (key.includes('mushroom')) {
+        ctx.strokeStyle = 'rgba(245,232,207,.22)';
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 44; i++) {
+          const angle = i * Math.PI / 22;
+          ctx.beginPath();
+          ctx.moveTo(256, 256);
+          ctx.quadraticCurveTo(256 + Math.cos(angle + .12) * 100, 256 + Math.sin(angle + .12) * 100,
+            256 + Math.cos(angle) * 245, 256 + Math.sin(angle) * 245);
+          ctx.stroke();
+        }
+      } else if (key.includes('paneer')) {
+        ctx.fillStyle = 'rgba(255,250,226,.3)';
+        for (let i = 0; i < 150; i++) {
+          ctx.fillRect(Math.random() * 512, Math.random() * 512, 1 + Math.random() * 3, 1 + Math.random() * 3);
+        }
+      }
+
+      const map = new THREE.CanvasTexture(canvas);
+      map.encoding = THREE.sRGBEncoding;
+      map.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+      const bumpCanvas = document.createElement('canvas');
+      bumpCanvas.width = bumpCanvas.height = 256;
+      const bumpCtx = bumpCanvas.getContext('2d');
+      const bumpImage = bumpCtx.createImageData(256, 256);
+      for (let i = 0; i < bumpImage.data.length; i += 4) {
+        const grain = 105 + Math.floor(Math.random() * 90);
+        bumpImage.data[i] = grain;
+        bumpImage.data[i + 1] = grain;
+        bumpImage.data[i + 2] = grain;
+        bumpImage.data[i + 3] = 255;
+      }
+      bumpCtx.putImageData(bumpImage, 0, 0);
+      const bump = new THREE.CanvasTexture(bumpCanvas);
+      const value = { map, bump };
+      textureCache.set(key, value);
+      ownedTextures.push(map, bump);
+      return value;
+    };
+
+    const makeMaterial = (key, base, highlight, detail, options = {}) => {
+      const textures = makeFoodTexture(key, base, highlight, detail);
+      return new THREE.MeshPhysicalMaterial({
+        map: textures.map,
+        bumpMap: textures.bump,
+        bumpScale: options.bumpScale ?? 0.22,
+        color: 0xffffff,
+        roughness: options.roughness ?? 0.5,
+        metalness: 0.0,
+        clearcoat: options.clearcoat ?? 0.16,
+        clearcoatRoughness: 0.32
+      });
+    };
+
+    const createRoundedPaneer = (material) => {
+      const shape = new THREE.Shape();
+      const radius = 2.0;
+      const size = 8.5;
+      shape.moveTo(-size + radius, -size);
+      shape.lineTo(size - radius, -size);
+      shape.quadraticCurveTo(size, -size, size, -size + radius);
+      shape.lineTo(size, size - radius);
+      shape.quadraticCurveTo(size, size, size - radius, size);
+      shape.lineTo(-size + radius, size);
+      shape.quadraticCurveTo(-size, size, -size, size - radius);
+      shape.lineTo(-size, -size + radius);
+      shape.quadraticCurveTo(-size, -size, -size + radius, -size);
+      const geometry = new THREE.ExtrudeGeometry(shape, {
+        depth: 14,
+        bevelEnabled: true,
+        bevelSegments: 4,
+        steps: 1,
+        bevelSize: 0.8,
+        bevelThickness: 0.7,
+        curveSegments: 12
+      });
+      geometry.translate(0, 0, -7);
+      geometry.computeVertexNormals();
+      return new THREE.Mesh(geometry, material);
+    };
+
+    const createModel = (ingredientName) => {
+      const group = new THREE.Group();
+      const name = String(ingredientName || '').toLowerCase();
+      const add = (geometry, material, position = [0, 0, 0], scale = [1, 1, 1]) => {
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(...position);
+        mesh.scale.set(...scale);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        group.add(mesh);
+        return mesh;
+      };
+
+      if (name.includes('mushroom') || name.includes('oyster') || name.includes('shroom')) {
+        const stemMat = new THREE.MeshPhysicalMaterial({ color: 0xf1e8d8, roughness: 0.78, bumpScale: 0.12 });
+        const stemProfile = [
+          new THREE.Vector2(0, -14), new THREE.Vector2(4.1, -13.8),
+          new THREE.Vector2(5.0, -10), new THREE.Vector2(4.4, -2),
+          new THREE.Vector2(5.2, 2), new THREE.Vector2(0, 3)
+        ];
+        add(new THREE.LatheGeometry(stemProfile, 48), stemMat, [0, -1, 0]);
+        const capMat = makeMaterial('mushroom-cap', '#9a6b42', '#c18d5b', '#4d3024', { roughness: 0.62, bumpScale: 0.3 });
+        const cap = add(new THREE.SphereGeometry(15, 72, 48, 0, Math.PI * 2, 0, Math.PI / 2), capMat, [0, 7, 0], [1.12, 0.72, 1.08]);
+        cap.rotation.z = -0.08;
+        const underside = new THREE.Mesh(new THREE.CircleGeometry(14.7, 64), new THREE.MeshStandardMaterial({ color: 0xe7d8c5, roughness: 0.82, side: THREE.DoubleSide }));
+        underside.rotation.x = -Math.PI / 2;
+        underside.position.y = 7.05;
+        group.add(underside);
+        const gillMat = new THREE.LineBasicMaterial({ color: 0xbda58e, transparent: true, opacity: 0.68 });
+        for (let i = 0; i < 38; i++) {
+          const angle = i * Math.PI * 2 / 38;
+          const points = [
+            new THREE.Vector3(Math.cos(angle) * 2.1, 7.08, Math.sin(angle) * 2.1),
+            new THREE.Vector3(Math.cos(angle) * 14.2, 7.08, Math.sin(angle) * 14.2)
+          ];
+          group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), gillMat));
+        }
+      } else if (name.includes('lime') || name.includes('lemon') || name.includes('citrus')) {
+        const citrusMat = makeMaterial('citrus-peel', '#79a936', '#c4d85b', '#426c2d', { roughness: 0.38, bumpScale: 0.52, clearcoat: 0.42 });
+        add(new THREE.SphereGeometry(13, 72, 56), citrusMat, [0, 0, 0], [1.18, 0.82, 0.92]);
+        const pith = new THREE.Mesh(new THREE.SphereGeometry(8.2, 48, 32), new THREE.MeshStandardMaterial({ color: 0xe9e1b8, roughness: 0.8 }));
+        pith.scale.set(1.1, 0.8, 0.88);
+        pith.position.set(0, 0, 3.5);
+        group.add(pith);
+        const pulpMat = makeMaterial('citrus-pulp', '#b8cf60', '#f1e9a5', '#7c9c38', { roughness: 0.42, bumpScale: 0.18 });
+        add(new THREE.CircleGeometry(7.8, 64), pulpMat, [0, 0, 8.0]);
+        const stem = add(new THREE.CylinderGeometry(0.45, 0.8, 3.4, 12), new THREE.MeshStandardMaterial({ color: 0x4a6e32, roughness: 0.72 }), [0, 10.2, 0]);
+        stem.rotation.z = 0.25;
+      } else if (name.includes('chili') || name.includes('mirchi') || name.includes('pepper')) {
+        const chiliColor = name.includes('red') ? ['#b81f22', '#e84a36', '#681b17'] : ['#c1a52e', '#efe06a', '#7b6d23'];
+        const chiliMat = makeMaterial('chili-' + chiliColor[0], chiliColor[0], chiliColor[1], chiliColor[2], { roughness: 0.31, bumpScale: 0.12, clearcoat: 0.5 });
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(-14, 10, 0), new THREE.Vector3(-7, 9, 1.2),
+          new THREE.Vector3(1, 5, 1.4), new THREE.Vector3(8, 0, 0.5),
+          new THREE.Vector3(13, -7, 0), new THREE.Vector3(15, -12, -0.3)
+        ]);
+        add(new THREE.TubeGeometry(curve, 64, 4.1, 24, false), chiliMat);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x47743a, roughness: 0.78 });
+        add(new THREE.CylinderGeometry(0.75, 1.3, 5, 16), stemMat, [-14, 11, 0]);
+        for (let i = 0; i < 5; i++) {
+          const leaf = add(new THREE.ConeGeometry(1.45, 5.2, 12), stemMat, [-13 + Math.cos(i * 1.25) * 2, 8.4, Math.sin(i * 1.25) * 2]);
+          leaf.rotation.z = (i - 2) * 0.5;
+        }
+      } else if (name.includes('paneer') || name.includes('cheese') || name.includes('tofu')) {
+        const mat = makeMaterial('paneer-curd', '#f1e5bd', '#fff8e6', '#cfbd92', { roughness: 0.72, bumpScale: 0.26 });
+        const cube = createRoundedPaneer(mat);
+        cube.rotation.set(-0.12, 0.25, 0.09);
+        group.add(cube);
+        const herbs = new THREE.MeshStandardMaterial({ color: 0x536f32, roughness: 0.9 });
+        for (let i = 0; i < 8; i++) {
+          const fleck = add(new THREE.SphereGeometry(0.28 + Math.random() * 0.24, 8, 6), herbs,
+            [(Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13]);
+          fleck.scale.set(1.4, 0.35, 0.9);
+        }
+      } else if (name.includes('onion')) {
+        const outer = makeMaterial('red-onion-skin', '#9f3153', '#e9a1a9', '#5a203f', { roughness: 0.42, bumpScale: 0.18 });
+        const center = new THREE.MeshStandardMaterial({ color: 0xf5dce2, roughness: 0.58, side: THREE.DoubleSide });
+        add(new THREE.TorusGeometry(10, 2.0, 20, 72), outer);
+        add(new THREE.TorusGeometry(6.6, 1.4, 16, 64), center, [0, 0, 0.5]);
+        add(new THREE.TorusGeometry(3.2, 1.0, 16, 48), outer, [0, 0, 0.9]);
+      } else if (name.includes('herb') || name.includes('coriander') || name.includes('mint')) {
+        const leafMat = makeMaterial('fresh-herb-leaf', '#397947', '#79b86a', '#1b4e34', { roughness: 0.66, bumpScale: 0.12 });
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x6d8e50, roughness: 0.8 });
+        for (let i = 0; i < 7; i++) {
+          const angle = i * Math.PI * 2 / 7;
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, -10, 0),
+            new THREE.Vector3(Math.cos(angle) * 4, -2, 1),
+            new THREE.Vector3(Math.cos(angle) * 11, 5 + (i % 2) * 2, Math.sin(angle) * 4)
+          ]);
+          add(new THREE.TubeGeometry(curve, 18, 0.3, 6, false), stemMat);
+          const leaf = add(new THREE.SphereGeometry(5, 32, 20), leafMat,
+            [Math.cos(angle) * 10, 6 + (i % 2) * 2, Math.sin(angle) * 4], [0.95, 0.24, 0.48]);
+          leaf.rotation.z = -angle * 0.6;
+        }
+      } else {
+        const spiceMat = makeMaterial('roasted-spice', '#a65f22', '#e5a64e', '#613516', { roughness: 0.84, bumpScale: 0.5 });
+        for (let i = 0; i < 5; i++) {
+          const radius = 4.4 + Math.random() * 1.9;
+          add(new THREE.SphereGeometry(radius, 36, 24), spiceMat,
+            [(i - 2) * 5.7, Math.sin(i * 2.1) * 3.2, Math.cos(i * 1.6) * 4],
+            [1, 0.82, 0.9]);
+        }
+      }
       return group;
     };
 
-    activeMesh = createModel('King Oyster Mushroom');
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = shadowCanvas.height = 128;
+    const shadowCtx = shadowCanvas.getContext('2d');
+    const shadowGradient = shadowCtx.createRadialGradient(64, 64, 4, 64, 64, 62);
+    shadowGradient.addColorStop(0, 'rgba(0,0,0,.28)');
+    shadowGradient.addColorStop(1, 'rgba(0,0,0,0)');
+    shadowCtx.fillStyle = shadowGradient;
+    shadowCtx.fillRect(0, 0, 128, 128);
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    ownedTextures.push(shadowTexture);
+    const contactShadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(42, 20),
+      new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false, opacity: isDark ? 0.75 : 0.48 })
+    );
+    contactShadow.rotation.x = -Math.PI / 2;
+    contactShadow.position.y = -17.82;
+    scene.add(contactShadow);
+
+    let activeMesh = createModel('King Oyster Mushroom');
     scene.add(activeMesh);
+    let animId = null;
+    let isPaused = false;
+    let isDragging = false;
+    let previousX = 0;
+    let previousY = 0;
+    let pointerId = null;
 
-    container.addEventListener('pointerdown', (e) => {
+    const onPointerDown = (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
       isDragging = true;
-      prevMouseX = e.clientX;
-      prevMouseY = e.clientY;
-    });
-
-    window.addEventListener('pointerup', () => { isDragging = false; });
-    window.addEventListener('pointermove', (e) => {
+      pointerId = event.pointerId;
+      previousX = event.clientX;
+      previousY = event.clientY;
+      renderer.domElement.style.cursor = 'grabbing';
+      if (renderer.domElement.setPointerCapture && pointerId !== undefined) {
+        try { renderer.domElement.setPointerCapture(pointerId); } catch (error) {}
+      }
+    };
+    const onPointerMove = (event) => {
       if (!isDragging || !activeMesh) return;
-      const dx = e.clientX - prevMouseX;
-      const dy = e.clientY - prevMouseY;
-      activeMesh.rotation.y += dx * 0.015;
-      activeMesh.rotation.x += dy * 0.015;
-      prevMouseX = e.clientX;
-      prevMouseY = e.clientY;
-    });
+      const dx = event.clientX - previousX;
+      const dy = event.clientY - previousY;
+      activeMesh.rotation.y += dx * 0.012;
+      activeMesh.rotation.x = THREE.MathUtils.clamp(activeMesh.rotation.x + dy * 0.008, -0.65, 0.65);
+      previousX = event.clientX;
+      previousY = event.clientY;
+    };
+    const onPointerUp = () => {
+      isDragging = false;
+      pointerId = null;
+      renderer.domElement.style.cursor = 'grab';
+    };
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerUp);
+    renderer.domElement.addEventListener('lostpointercapture', onPointerUp);
 
     const animate = () => {
       if (isPaused) return;
       animId = requestAnimationFrame(animate);
-
       if (activeMesh && !isDragging) {
-        activeMesh.rotation.y += 0.012;
-        activeMesh.position.y = Math.sin(Date.now() * 0.002) * 1.5;
+        activeMesh.rotation.y += 0.0035;
+        activeMesh.position.y = Math.sin(Date.now() * 0.0014) * 0.5;
       }
       renderer.render(scene, camera);
     };
-
     animate();
 
     const handleResize = () => {
       const w = container.clientWidth;
       const h = container.clientHeight;
-      if (w === 0 || h === 0) return;
+      if (!w || !h) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h, false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, w < 640 ? 1.5 : 2));
     };
-
+    let resizeObserver = null;
     if (typeof ResizeObserver !== 'undefined') {
-      const ro = new ResizeObserver(() => handleResize());
-      ro.observe(container);
+      resizeObserver = new ResizeObserver(handleResize);
+      resizeObserver.observe(container);
     }
+
+    const disposeObject = (root) => {
+      root?.traverse((object) => {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) {
+          const materials = Array.isArray(object.material) ? object.material : [object.material];
+          materials.forEach(material => material.dispose());
+        }
+      });
+    };
 
     this.active3DScenes.set('dishIngredient', {
       dispose: () => {
         cancelAnimationFrame(animId);
+        resizeObserver?.disconnect();
+        renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+        renderer.domElement.removeEventListener('pointermove', onPointerMove);
+        renderer.domElement.removeEventListener('pointerup', onPointerUp);
+        renderer.domElement.removeEventListener('pointercancel', onPointerUp);
+        renderer.domElement.removeEventListener('lostpointercapture', onPointerUp);
+        disposeObject(activeMesh);
+        ownedTextures.forEach(texture => texture.dispose());
+        floor.geometry.dispose();
+        floor.material.dispose();
+        contactShadow.geometry.dispose();
+        contactShadow.material.dispose();
         renderer.dispose();
+        if (renderer.domElement.parentNode === container) renderer.domElement.remove();
       },
-      setPaused: (p) => {
-        isPaused = p;
-        if (!p) animate();
+      setPaused: (paused) => {
+        isPaused = paused;
+        if (!paused) animate();
+        else cancelAnimationFrame(animId);
       },
       handleResize,
       updateModel: (ingredientName) => {
-        if (activeMesh) scene.remove(activeMesh);
+        disposeObject(activeMesh);
+        scene.remove(activeMesh);
         activeMesh = createModel(ingredientName);
+        activeMesh.position.y = 0;
         scene.add(activeMesh);
         const badge = container.querySelector('#dish-3d-badge');
-        if (badge) badge.innerText = `🌿 ${ingredientName}`;
+        if (badge) badge.innerText = '🌿 ' + ingredientName;
       },
       animateJump: () => {
         if (!activeMesh) return;
-        let jumpProgress = 0;
-        const jumpInterval = setInterval(() => {
-          jumpProgress += 0.08;
-          activeMesh.position.y = Math.sin(jumpProgress * Math.PI) * 15;
-          activeMesh.rotation.z += 0.25;
-          if (jumpProgress >= 1) {
-            clearInterval(jumpInterval);
-            activeMesh.position.y = 0;
-          }
-        }, 20);
+        const start = performance.now();
+        const initialY = activeMesh.position.y;
+        const jump = (now) => {
+          const progress = Math.min(1, (now - start) / 420);
+          activeMesh.position.y = initialY + Math.sin(progress * Math.PI) * 7;
+          if (progress < 1) requestAnimationFrame(jump);
+          else activeMesh.position.y = initialY;
+        };
+        requestAnimationFrame(jump);
       }
     });
   }
