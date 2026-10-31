@@ -3394,67 +3394,50 @@ class Fusion3DManager {
   // 1. HOT POTATO RUSH 3D ELEMENT
   // --------------------------------------------------------
   createDeformedPotatoMesh() {
-    const geom = new THREE.IcosahedronGeometry(28, 5);
-    const pos = geom.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = pos.getY(i);
-      const z = pos.getZ(i);
-      const wave = 1 + 0.045 * Math.sin(x * 0.23 + z * 0.13) * Math.cos(y * 0.19)
-        + 0.025 * Math.sin(z * 0.34 + y * 0.11);
-      pos.setXYZ(i, x * 1.28 * wave, y * 0.91 * wave, z * 0.94 * wave);
+    const geometry = new THREE.SphereGeometry(1, 96, 72);
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+      const taper = 1 - 0.075 * Math.pow(Math.abs(x), 2);
+      const grain = 1 + 0.032 * Math.sin(x * 13.5 + z * 4.2) * Math.cos(y * 8.5) + 0.018 * Math.sin(z * 17 + y * 7);
+      position.setXYZ(i, x * 39 * taper * grain, y * 25.5 * grain, z * 27.5 * taper * grain);
     }
-    geom.computeVertexNormals();
-
-    // A subtle procedural russet skin with fine pores and natural colour variation.
-    const skinCanvas = document.createElement('canvas');
-    skinCanvas.width = skinCanvas.height = 512;
-    const skinCtx = skinCanvas.getContext('2d');
-    const skinGradient = skinCtx.createLinearGradient(30, 30, 470, 490);
-    skinGradient.addColorStop(0, '#E9C18E');
-    skinGradient.addColorStop(0.42, '#C58B54');
-    skinGradient.addColorStop(1, '#98603C');
-    skinCtx.fillStyle = skinGradient;
-    skinCtx.fillRect(0, 0, 512, 512);
-    for (let i = 0; i < 2300; i++) {
-      const x = Math.random() * 512;
-      const y = Math.random() * 512;
-      const radius = 0.35 + Math.random() * 1.55;
-      skinCtx.fillStyle = i % 4 === 0
-        ? 'rgba(255,235,198,' + (0.05 + Math.random() * 0.12) + ')'
-        : 'rgba(74,39,20,' + (0.035 + Math.random() * 0.105) + ')';
-      skinCtx.beginPath();
-      skinCtx.ellipse(x, y, radius * 1.7, radius, Math.random() * Math.PI, 0, Math.PI * 2);
-      skinCtx.fill();
+    geometry.computeVertexNormals();
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const gradient = ctx.createLinearGradient(20, 20, 490, 490);
+    gradient.addColorStop(0, '#E7C397');
+    gradient.addColorStop(0.5, '#B87E4F');
+    gradient.addColorStop(1, '#75482D');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 3200; i++) {
+      const x = Math.random() * 512, y = Math.random() * 512, r = 0.3 + Math.random() * 1.8;
+      const alpha = 0.035 + Math.random() * 0.12;
+      ctx.fillStyle = i % 5 === 0 ? 'rgba(255,236,202,' + alpha + ')' : 'rgba(63,35,19,' + alpha + ')';
+      ctx.beginPath();
+      ctx.ellipse(x, y, r * 1.6, r, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
     }
-    const skinTexture = new THREE.CanvasTexture(skinCanvas);
-    skinTexture.encoding = THREE.sRGBEncoding;
-    const mat = new THREE.MeshStandardMaterial({
-      color: 0xFFFFFF,
-      map: skinTexture,
-      bumpMap: skinTexture,
-      bumpScale: 0.48,
-      roughness: 0.88,
-      metalness: 0.0
-    });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.castShadow = true;
-
-    // Small natural potato eyes/pits are attached to the same rotating 3D mesh.
-    const pitMat = new THREE.MeshStandardMaterial({ color: 0x704325, roughness: 0.98 });
-    for (let i = 0; i < 24; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos((Math.random() * 2) - 1);
-      const nx = Math.sin(phi) * Math.cos(theta);
-      const ny = Math.cos(phi);
-      const nz = Math.sin(phi) * Math.sin(theta);
-      const pit = new THREE.Mesh(new THREE.SphereGeometry(0.72 + Math.random() * 0.38, 8, 6), pitMat);
-      pit.position.set(nx * 36.2, ny * 25.7, nz * 26.5);
-      pit.scale.set(1.35, 0.48, 0.82);
-      pit.lookAt(nx * 60, ny * 60, nz * 60);
-      mesh.add(pit);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.encoding = THREE.sRGBEncoding;
+    const material = new THREE.MeshPhysicalMaterial({ map: texture, bumpMap: texture, bumpScale: 0.32, roughness: 0.82, metalness: 0, clearcoat: 0.08 });
+    const potato = new THREE.Mesh(geometry, material);
+    potato.castShadow = true;
+    const pitMaterial = new THREE.MeshStandardMaterial({ color: 0x603B25, roughness: 0.98 });
+    for (let i = 0; i < 28; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const ny = Math.random() * 1.68 - 0.84;
+      const ring = Math.sqrt(Math.max(0, 1 - ny * ny));
+      const nx = Math.cos(angle) * ring, nz = Math.sin(angle) * ring;
+      const pit = new THREE.Mesh(new THREE.SphereGeometry(0.8 + Math.random() * 0.35, 8, 6), pitMaterial);
+      pit.position.set(nx * 38, ny * 25.2, nz * 27);
+      pit.scale.set(1.2, 0.42, 0.8);
+      pit.lookAt(nx * 70, ny * 70, nz * 70);
+      potato.add(pit);
     }
-    return mesh;
+    return potato;
   }
 
   initHotPotato3D(container, potatoState) {
