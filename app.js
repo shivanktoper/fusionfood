@@ -9707,9 +9707,9 @@ Guidelines:
 
     const isMobileStage = width < 640;
     const camera = new THREE.PerspectiveCamera(isMobileStage ? 52 : 44, width / height, 0.1, 1100);
-    const baseCameraHeight = isMobileStage ? 104 : 72;
-    const baseCameraDistance = isMobileStage ? 268 : 158;
-    const cameraTargetY = isMobileStage ? -8 : -6;
+    let baseCameraHeight = isMobileStage ? 104 : 72;
+    let baseCameraDistance = isMobileStage ? 268 : 158;
+    let cameraTargetY = isMobileStage ? -8 : -6;
     let cameraZoom = 1;
     const applyTandoorCameraZoom = () => {
       camera.position.set(0, baseCameraHeight / cameraZoom, baseCameraDistance / cameraZoom);
@@ -10784,6 +10784,9 @@ Guidelines:
       if (w === 0 || h === 0) return;
       const mobileStage = w < 640;
       camera.fov = mobileStage ? 52 : 44;
+      baseCameraHeight = mobileStage ? 104 : 72;
+      baseCameraDistance = mobileStage ? 268 : 158;
+      cameraTargetY = mobileStage ? -8 : -6;
       applyTandoorCameraZoom();
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
@@ -11262,12 +11265,13 @@ Guidelines:
                  name.includes('curd') || name.includes('cream') || name.includes('yogurt') ||
                  name.includes('chutney') || name.includes('marinara') || name.includes('jam') ||
                  name.includes('sauce') || name.includes('paste') || name.includes('stock') ||
-                 name.includes('sesame oil') || name.includes('butter')) {
+                 name.includes('sesame oil') || name.includes('mayonnaise') || name.includes('chili crisp') ||
+                 (name.includes('butter') && !name.includes('biscuit'))) {
         let palette = ['#c47a25', '#f0bc64', '#6f3519'];
         if (name.includes('green') || name.includes('mint') || name.includes('coriander')) palette = ['#367b45', '#8fbd66', '#1d4c2c'];
         else if (name.includes('tomato') || name.includes('marinara') || name.includes('tikka')) palette = ['#b73a1e', '#ef8651', '#6c2017'];
         else if (name.includes('yellow') || name.includes('pepper')) palette = ['#c79c24', '#f7df79', '#825316'];
-        else if (name.includes('cream') || name.includes('curd') || name.includes('yogurt') || name.includes('mayo')) palette = ['#dfd4b7', '#fff7e8', '#b8a982'];
+        else if (name.includes('cream') || name.includes('curd') || name.includes('yogurt') || name.includes('mayo') || name.includes('mayonnaise')) palette = ['#dfd4b7', '#fff7e8', '#b8a982'];
         else if (name.includes('sesame') || name.includes('oil') || name.includes('butter')) palette = ['#ad791a', '#f2c34a', '#71420f'];
         else if (name.includes('coconut')) palette = ['#9a713c', '#e6c28d', '#533b28'];
         addSauceBowl(palette[0], palette[1], palette[2], !name.includes('oil') && !name.includes('broth'));
