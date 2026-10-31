@@ -3422,10 +3422,10 @@ class Fusion3DManager {
     }
     const texture = new THREE.CanvasTexture(canvas);
     texture.encoding = THREE.sRGBEncoding;
-    const material = new THREE.MeshPhysicalMaterial({ map: texture, bumpMap: texture, bumpScale: 0.32, roughness: 0.82, metalness: 0, clearcoat: 0.08 });
+    const material = new THREE.MeshPhysicalMaterial({ map: texture, bumpMap: texture, bumpScale: 0.32, roughness: 0.82, metalness: 0, clearcoat: 0.08, side: THREE.DoubleSide });
     const potato = new THREE.Mesh(geometry, material);
     potato.castShadow = true;
-    const pitMaterial = new THREE.MeshStandardMaterial({ color: 0x603B25, roughness: 0.98 });
+    const pitMaterial = new THREE.MeshStandardMaterial({ color: 0x603B25, roughness: 0.98, side: THREE.DoubleSide });
     for (let i = 0; i < 28; i++) {
       const angle = Math.random() * Math.PI * 2;
       const ny = Math.random() * 1.68 - 0.84;
@@ -3455,7 +3455,8 @@ class Fusion3DManager {
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(this.clampDPR());
     renderer.setSize(width, height);
-    renderer.domElement.id = 'hp-3d-game-canvas';
+    renderer.domElement.id = 'hp-three-canvas';
+    renderer.domElement.classList.add('hp-3d-game-canvas');
     renderer.domElement.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;';
 
     const ambientLight = new THREE.AmbientLight(0xFFFFFF, 0.9);
@@ -3511,6 +3512,23 @@ class Fusion3DManager {
     const sparkles = new THREE.Points(sparkleGeom, sparkleMat);
     potatoMesh.add(sparkles);
 
+    // Realistic ambient potato shadow beneath the potato
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = shadowCanvas.height = 128;
+    const sCtx = shadowCanvas.getContext('2d');
+    const sGrad = sCtx.createRadialGradient(64, 64, 0, 64, 64, 60);
+    sGrad.addColorStop(0, 'rgba(0,0,0,0.45)');
+    sGrad.addColorStop(0.65, 'rgba(0,0,0,0.18)');
+    sGrad.addColorStop(1, 'rgba(0,0,0,0)');
+    sCtx.fillStyle = sGrad;
+    sCtx.fillRect(0, 0, 128, 128);
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    const shadowGeom = new THREE.PlaneGeometry(62, 32);
+    const shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    const potatoShadow = new THREE.Mesh(shadowGeom, shadowMat);
+    potatoShadow.position.set(potatoState ? potatoState.x : 200, (potatoState ? potatoState.y : 160) + 31, -42);
+    scene.add(potatoShadow);
+
     const ro = this.createResizeObserver(container, camera, renderer);
 
     this.activeScenes.hotPotato = {
@@ -3548,28 +3566,36 @@ class Fusion3DManager {
     sc.rotY += 0.018 + Math.min(0.018, Math.abs(p.vy || 0) * 0.001);
     sc.potatoMesh.rotation.set(sc.rotX, sc.rotY, p.rotation || 0);
 
-    const cook = Math.max(0, Number(p.cookLevel) || 0);
-    const material = sc.potatoMesh.material;
-    if (cook < 38) {
-      material.color.setHex(0xFFFFFF);
-      material.roughness = 0.84;
-      material.emissive.setHex(0x000000);
-      material.emissiveIntensity = 0;
-      sc.sparkles.material.opacity = 0;
-    } else if (cook <= 85) {
-      material.color.setHex(0xE5B05F);
-      material.roughness = 0.58;
-      material.emissive.setHex(0x5A2308);
-      material.emissiveIntensity = 0.1;
-      sc.sparkles.material.opacity = 0.36;
-      sc.sparkles.rotation.y += 0.025;
-      sc.sparkles.rotation.z += 0.018;
-    } else {
-      material.color.setHex(0x493027);
-      material.roughness = 0.98;
-      material.emissive.setHex(0x170905);
-      material.emissiveIntensity = 0.035;
-      sc.sparkles.material.opacity = 0;
+      const cook = Math.max(0, Number(p.cookLevel) || 0);
+      const material = sc.potatoMesh.material;
+      if (material && material.color) {
+        if (cook < 38) {
+          material.color.setHex(0xFFFFFF);
+          material.roughness = 0.84;
+          material.emissive.setHex(0x000000);
+          material.emissiveIntensity = 0;
+          if (sc.sparkles && sc.sparkles.material) sc.sparkles.material.opacity = 0;
+        } else if (cook <= 85) {
+          material.color.setHex(0xE5B05F);
+          material.roughness = 0.58;
+          material.emissive.setHex(0x5A2308);
+          material.emissiveIntensity = 0.1;
+          if (sc.sparkles && sc.sparkles.material) {
+            sc.sparkles.material.opacity = 0.36;
+            sc.sparkles.rotation.y += 0.025;
+            sc.sparkles.rotation.z += 0.018;
+          }
+        } else {
+          material.color.setHex(0x493027);
+          material.roughness = 0.98;
+          material.emissive.setHex(0x170905);
+          material.emissiveIntensity = 0.035;
+          if (sc.sparkles && sc.sparkles.material) sc.sparkles.material.opacity = 0;
+        }
+      }
+    }
+    if (sc.potatoShadow) {
+      sc.potatoShadow.position.set(p.x, p.y + 31, -42);
     }
     sc.renderer.render(sc.scene, sc.camera);
   }

@@ -320,7 +320,7 @@ async function verifyViewportsWithChrome(tracker) {
           const potBtn = document.querySelector('[data-game-id="hotPotato"]');
           if (potBtn) potBtn.click();
           await new Promise(r => setTimeout(r, 300));
-          results.hasPotatoCanvas = !!document.getElementById('hp-three-canvas');
+          results.hasPotatoCanvas = !!(document.getElementById('hp-three-canvas') || document.getElementById('hp-3d-game-canvas'));
           
           // Kitchen Lab Tandoor
           document.getElementById('tab-btn-kitchen')?.click();

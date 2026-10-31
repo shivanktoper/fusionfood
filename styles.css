@@ -5483,7 +5483,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .mobile-bottom-nav { padding-bottom:max(.35rem,env(safe-area-inset-bottom)); }
 .mobile-bottom-nav .nav-link { min-height:48px; }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
   .site-header { position:sticky !important; top:0 !important; padding:0 .4rem; }
   .header-inner { width:calc(100% - 12px); min-height:62px; gap:.35rem; flex-wrap:nowrap !important; justify-content:space-between; }
   .site-header .site-nav { display:none !important; }
@@ -5941,7 +5941,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   font-size: 0.72rem;
 }
 
-#hp-canvas-container #hp-3d-game-canvas {
+#hp-canvas-container #hp-3d-game-canvas,
+#hp-canvas-container #hp-three-canvas {
   position: absolute;
   inset: 0;
   z-index: 4 !important;
@@ -6166,7 +6167,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   height: 100%;
   object-fit: fill;
 }
-.hot-potato-canvas-container #hp-3d-game-canvas {
+.hot-potato-canvas-container #hp-3d-game-canvas,
+.hot-potato-canvas-container #hp-three-canvas {
   position: absolute !important;
   inset: 0 !important;
   z-index: 2 !important;
