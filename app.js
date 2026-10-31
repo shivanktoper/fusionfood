@@ -4338,8 +4338,9 @@ class FusionApp {
     this.initThreeJSLifecycle();
     this.applyTheme(this.state.theme);
     this.renderHeader();
-    this.renderProgressStrip();
+    this.bindHeaderEvents();
     this.initMainTabs();
+    this.renderProgressStrip();
     this.renderGameTabs();
     this.renderActiveGame();
     this.renderKitchenLab(this.state.recipeFilter);
@@ -9239,10 +9240,28 @@ Guidelines:
     }
   }
 
+  bindHeaderEvents() {
+    const bind = (id, action, closeTools = false) => {
+      const element = document.getElementById(id);
+      if (!element || element.dataset.headerActionBound === 'true') return;
+      element.dataset.headerActionBound = 'true';
+      element.addEventListener('click', (event) => {
+        if (closeTools) element.closest('.header-more-menu')?.removeAttribute('open');
+        action(event);
+      });
+    };
+    bind('theme-toggle-btn', () => this.toggleTheme());
+    bind('sound-toggle-btn', () => this.toggleSound());
+    bind('profile-switch-btn', () => this.openProfileModal());
+    bind('admin-modal-open-btn', () => this.openAdminModal(), true);
+    bind('open-camera-scanner-btn', () => this.openCameraScannerModal(), true);
+    bind('open-portfolio-btn', () => this.openPortfolioModal(), true);
+    bind('open-tour-btn', () => this.openTourModal(), true);
+    bind('hero-primary-cta', () => { sound.playClick(); this.switchMainTab('games'); });
+    bind('hero-secondary-cta', () => { sound.playClick(); this.switchMainTab('kitchen'); });
+  }
+
   bindEvents() {
-    document.getElementById('theme-toggle-btn')?.addEventListener('click', () => this.toggleTheme());
-    document.getElementById('sound-toggle-btn')?.addEventListener('click', () => this.toggleSound());
-    document.getElementById('profile-switch-btn')?.addEventListener('click', () => this.openProfileModal());
     document.getElementById('close-profile-modal-btn')?.addEventListener('click', () => this.closeProfileModal());
     document.getElementById('profile-modal')?.addEventListener('click', (e) => {
       if (e.target.id === 'profile-modal') this.closeProfileModal();
@@ -9260,7 +9279,6 @@ Guidelines:
         }
       }
     });
-    document.getElementById('admin-modal-open-btn')?.addEventListener('click', () => this.openAdminModal());
     document.getElementById('admin-footer-link')?.addEventListener('click', () => this.openAdminModal());
     document.getElementById('close-admin-modal-btn')?.addEventListener('click', () => this.closeAdminModal());
     document.getElementById('admin-modal')?.addEventListener('click', (e) => {
@@ -9298,18 +9316,15 @@ Guidelines:
     });
 
     // Header actions: camera and portfolio.
-    document.getElementById('open-camera-scanner-btn')?.addEventListener('click', () => this.openCameraScannerModal());
     document.getElementById('close-camera-modal-btn')?.addEventListener('click', () => this.closeCameraScannerModal());
     document.getElementById('camera-scanner-modal')?.addEventListener('click', (e) => {
       if (e.target.id === 'camera-scanner-modal') this.closeCameraScannerModal();
     });
-    document.getElementById('open-portfolio-btn')?.addEventListener('click', () => this.openPortfolioModal());
     document.getElementById('close-portfolio-modal-btn')?.addEventListener('click', () => this.closePortfolioModal());
     document.getElementById('portfolio-modal')?.addEventListener('click', (e) => {
       if (e.target.id === 'portfolio-modal') this.closePortfolioModal();
     });
 
-    document.getElementById('open-tour-btn')?.addEventListener('click', () => this.openTourModal());
     document.getElementById('close-tour-modal-btn')?.addEventListener('click', () => this.closeTourModal());
     document.getElementById('ai-face-tour-modal')?.addEventListener('click', (e) => {
       if (e.target.id === 'ai-face-tour-modal') this.closeTourModal();
@@ -9350,14 +9365,6 @@ Guidelines:
     document.addEventListener('keydown', handleModalKeydown);
 
     // Hero Dual Action CTAs (FF-10)
-    document.getElementById('hero-primary-cta')?.addEventListener('click', () => {
-      sound.playClick();
-      this.switchMainTab('games');
-    });
-    document.getElementById('hero-secondary-cta')?.addEventListener('click', () => {
-      sound.playClick();
-      this.switchMainTab('kitchen');
-    });
 
     // Kitchen Instant Recipe Search (K-03)
     document.getElementById('kitchen-recipe-search')?.addEventListener('input', (e) => {
