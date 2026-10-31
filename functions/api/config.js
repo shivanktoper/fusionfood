@@ -15,7 +15,8 @@ const DEFAULT_SITE_CONFIG = {
     chefHatCameraFilter: true,
     faceVectorAntiDuplication: true,
     pdfPortfolioExport: true,
-    aiFaceExplainerTour: true
+    aiFaceExplainerTour: true,
+    hotPotato3D: true
   }
 };
 

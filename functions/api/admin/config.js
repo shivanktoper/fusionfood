@@ -4,7 +4,7 @@ import { requireAdmin } from "./_auth.js";
 const ALLOWED_GAME_TOGGLES = ["buildDish", "pronunciation", "trivia", "hotPotato", "spinScience"];
 const ALLOWED_FEATURES = [
   "fusionExplorerTab", "tandoorSkewerGame", "chefHatCameraFilter",
-  "faceVectorAntiDuplication", "pdfPortfolioExport", "aiFaceExplainerTour"
+  "faceVectorAntiDuplication", "pdfPortfolioExport", "aiFaceExplainerTour", "hotPotato3D"
 ];
 
 function jsonResponse(data, status = 200) {
@@ -57,7 +57,8 @@ export async function onRequestPost(context) {
     },
     v2Features: booleanSettings(input.v2Features, ALLOWED_FEATURES, {
       fusionExplorerTab: true, tandoorSkewerGame: true, chefHatCameraFilter: true,
-      faceVectorAntiDuplication: true, pdfPortfolioExport: true, aiFaceExplainerTour: true
+      faceVectorAntiDuplication: true, pdfPortfolioExport: true, aiFaceExplainerTour: true,
+      hotPotato3D: true
     })
   };
 
