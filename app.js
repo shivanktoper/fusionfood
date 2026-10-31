@@ -2353,6 +2353,7 @@ const DEFAULT_STATE = {
   v2Features: {
     fusionExplorerTab: true,
     hotPotatoEnhanced: true,
+    hotPotato3D: true,
     expandedWheel: true,
     bifurcatedDifficulty: true,
     parentScoreVerification: true,
@@ -4191,9 +4192,10 @@ class FusionApp {
         else parsed.guestReviews = [];
         if (Array.isArray(parsed.kidScoreVerifications)) parsed.kidScoreVerifications = parsed.kidScoreVerifications.filter(r => !['sc_kid_01', 'sc_kid_02'].includes(r.scoreId));
         else parsed.kidScoreVerifications = [];
-        if (!parsed.v2Features) {
-          parsed.v2Features = { ...DEFAULT_STATE.v2Features };
-        }
+        parsed.v2Features = {
+          ...DEFAULT_STATE.v2Features,
+          ...(parsed.v2Features || {})
+        };
         if (!Array.isArray(parsed.guestReviews)) parsed.guestReviews = [];
         if (!Array.isArray(parsed.kidScoreVerifications)) parsed.kidScoreVerifications = [];
         if (!parsed.faceHashes) {
@@ -4793,6 +4795,9 @@ class FusionApp {
   }
 
   renderActiveGame() {
+    if (this.threeManager && typeof this.threeManager.disposeScene === 'function') {
+      this.threeManager.disposeScene('hotPotato');
+    }
     this.pauseHotPotatoSession = null;
     if (this.hotPotatoLoop) { cancelAnimationFrame(this.hotPotatoLoop); this.hotPotatoLoop = null; }
     if (this.hotPotatoKeyHandler) { window.removeEventListener('keydown', this.hotPotatoKeyHandler); this.hotPotatoKeyHandler = null; }
@@ -5650,8 +5655,9 @@ class FusionApp {
       served: false
     };
 
+    const use3DPotato = this.state.v2Features?.hotPotato3D !== false;
     let has3DPotato = false;
-    if (this.threeManager && this.threeManager.isSupported()) {
+    if (use3DPotato && this.threeManager && this.threeManager.isSupported()) {
       this.threeManager.initHotPotato3D(arena.querySelector('#hp-canvas-container'), potato);
       has3DPotato = !!(this.threeManager.activeScenes && this.threeManager.activeScenes.hotPotato);
     }
@@ -5967,7 +5973,7 @@ class FusionApp {
         potato.x += potato.vx;
         potato.y += potato.vy;
         potato.rotation += potato.rotSpeed;
-        if (this.threeManager && this.threeManager.isSupported()) {
+        if (has3DPotato) {
           this.threeManager.updateHotPotato3D(potato);
         }
 
@@ -8317,8 +8323,10 @@ Guidelines:
   }
 
   async saveGlobalAdminConfig() {
-    if (typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost()) {
-      throw new Error('Global settings require the Cloudflare Pages backend.');
+    const localOnly = typeof window === 'undefined' || window.location.protocol === 'file:' || isGitHubPagesStaticHost();
+    if (localOnly) {
+      this.saveState();
+      return { savedLocally: true };
     }
     const config = {
       appVersion: this.state.appVersion,
@@ -8336,7 +8344,8 @@ Guidelines:
         chefHatCameraFilter: this.state.v2Features?.chefHatCameraFilter !== false,
         faceVectorAntiDuplication: this.state.v2Features?.faceVectorAntiDuplication !== false,
         pdfPortfolioExport: this.state.v2Features?.pdfPortfolioExport !== false,
-        aiFaceExplainerTour: this.state.v2Features?.aiFaceExplainerTour !== false
+        aiFaceExplainerTour: this.state.v2Features?.aiFaceExplainerTour !== false,
+        hotPotato3D: this.state.v2Features?.hotPotato3D !== false
       }
     };
     const response = await fetch('/api/admin/config', {
@@ -8482,6 +8491,13 @@ Guidelines:
           <!-- Granular Feature Sub-Toggles -->
           <h4 style="font-size:0.9rem; margin:0 0 0.5rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Granular Modular Sub-Toggles</h4>
           <div class="admin-toggles-list" style="margin-bottom:1.25rem;">
+            <div class="toggle-row">
+              <span id="lbl-toggle-v2-hot-potato-3d">🥔 Hot Potato 3D Model (off = 2D fallback)</span>
+              <label class="switch">
+                <input type="checkbox" id="toggle-v2-hot-potato-3d" aria-labelledby="lbl-toggle-v2-hot-potato-3d" ${v2.hotPotato3D !== false ? 'checked' : ''} />
+                <span class="slider" aria-hidden="true"></span>
+              </label>
+            </div>
             <div class="toggle-row">
               <span id="lbl-toggle-v2-fusion-tab">🌍 Fusion Explorer Tab</span>
               <label class="switch">
@@ -8710,7 +8726,8 @@ Guidelines:
             chefHatCameraFilter: document.getElementById('toggle-v2-camera')?.checked ?? true,
             faceVectorAntiDuplication: document.getElementById('toggle-v2-face-dupe')?.checked ?? true,
             pdfPortfolioExport: document.getElementById('toggle-v2-pdf')?.checked ?? true,
-            aiFaceExplainerTour: document.getElementById('toggle-v2-tour')?.checked ?? true
+            aiFaceExplainerTour: document.getElementById('toggle-v2-tour')?.checked ?? true,
+            hotPotato3D: document.getElementById('toggle-v2-hot-potato-3d')?.checked ?? true
           };
           try {
             await this.saveGlobalAdminConfig();
@@ -8721,7 +8738,8 @@ Guidelines:
             this.renderLeaderboard();
             sound.playCorrect();
             this.closeAdminModal();
-            showToast('Settings published globally for all visitors.', 'success');
+            const localOnly = window.location.protocol === 'file:' || isGitHubPagesStaticHost();
+            showToast(localOnly ? 'Settings saved in this browser only.' : 'Settings published globally for all visitors.', localOnly ? 'info' : 'success');
           } catch (error) {
             this.state.appVersion = previous.appVersion;
             this.state.gameToggles = previous.gameToggles;
