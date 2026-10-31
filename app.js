@@ -11273,11 +11273,6 @@ Guidelines:
         addSauceBowl(palette[0], palette[1], palette[2], !name.includes('oil') && !name.includes('broth'));
       } else if (name.includes('bell pepper') || name.includes('capsicum')) {
         addBellPepper(name.includes('green') ? 'green' : name.includes('yellow') ? 'yellow' : 'red');
-        if (name.includes('& onion')) {
-          const onionMat = makeMaterial('red-onion-skin', '#9f3153', '#e9a1a9', '#5a203f', { roughness: 0.42, bumpScale: 0.18 });
-          add(new THREE.TorusGeometry(7, 1.8, 16, 64), onionMat, [13, -8, 0]);
-          add(new THREE.TorusGeometry(4.3, 1.2, 16, 48), paleMat, [13, -8, 0.5]);
-        }
       } else if (name.includes('chili') || name.includes('mirchi') || name.includes('chilli')) {
         const chiliColor = name.includes('red') ? ['#b81f22', '#e84a36', '#681b17'] : ['#c1a52e', '#efe06a', '#7b6d23'];
         const chiliMat = makeMaterial('chili-' + chiliColor[0], chiliColor[0], chiliColor[1], chiliColor[2], { roughness: 0.31, bumpScale: 0.12, clearcoat: 0.5 });
@@ -11474,14 +11469,12 @@ Guidelines:
       }
 
       // A small, realistic garnish cue makes compound pantry ingredients read as composed food.
-      if (name.includes('& corn') || name.includes('sweet corn & bok choy')) addCorn();
+      if (name.includes('& corn') && !name.includes('bok choy')) addCorn();
       if (name.includes('& onions') || name.includes('bell peppers & onions')) {
         const onionMat = makeMaterial('red-onion-skin', '#9f3153', '#e9a1a9', '#5a203f', { roughness: 0.42, bumpScale: 0.18 });
         add(new THREE.TorusGeometry(8, 1.8, 16, 64), onionMat, [13, -7, 0]);
         add(new THREE.TorusGeometry(4, 1.15, 16, 48), paleMat, [13, -7, 0.5]);
       }
-      return group;
-    };
       return group;
     };
 
