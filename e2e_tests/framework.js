@@ -322,27 +322,30 @@ class ChromeCDPRunner {
         ]);
 
         let started = false;
+        let attempts = 0;
         const checkReady = () => {
+          attempts++;
           http.get(`http://127.0.0.1:${this.port}/json/list`, res => {
             let data = '';
             res.on('data', chunk => data += chunk);
             res.on('end', async () => {
               try {
                 const targets = JSON.parse(data);
-                const target = targets.find(t => t.url.includes('index.html')) || targets[0];
+                const target = targets.find(t => t.url && t.url.includes('index.html') && t.webSocketDebuggerUrl) ||
+                  (attempts > 5 ? targets.find(t => t.type === 'page' && t.webSocketDebuggerUrl) : null);
                 if (target && target.webSocketDebuggerUrl) {
                   started = true;
                   await this.connectWebSocket(target.webSocketDebuggerUrl);
                   resolve(true);
                 } else {
-                  setTimeout(checkReady, 300);
+                  setTimeout(checkReady, 250);
                 }
               } catch (e) {
-                setTimeout(checkReady, 300);
+                setTimeout(checkReady, 250);
               }
             });
           }).on('error', () => {
-            if (!started) setTimeout(checkReady, 300);
+            if (!started) setTimeout(checkReady, 250);
           });
         };
 
@@ -418,6 +421,9 @@ class ChromeCDPRunner {
       returnByValue: true,
       awaitPromise: true
     });
+    if (result.exceptionDetails) {
+      console.error('[CDP EVAL EXCEPTION]', result.exceptionDetails);
+    }
     return result.result ? result.result.value : undefined;
   }
 
