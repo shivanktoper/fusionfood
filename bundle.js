@@ -3513,65 +3513,52 @@ class Fusion3DManager {
 
   updateHotPotato3D(potatoState) {
     const sc = this.activeScenes.hotPotato;
-    if (!sc) return;
-    sc.potatoState = potatoState;
+    if (!sc || !sc.renderer || !sc.renderer.domElement || !sc.renderer.domElement.isConnected) return;
+    const p = potatoState || sc.potatoState;
+    if (!p) return;
+    sc.potatoState = p;
+
+    // The 3D potato is rendered on the exact same frame as the game physics.
+    sc.potatoMesh.position.set(p.x, p.y, 0);
+    sc.potatoShadow.position.set(p.x, p.y + 31, -42);
+    sc.rotX += (p.vx || 0) * 0.035;
+    sc.rotY += 0.018 + Math.min(0.018, Math.abs(p.vy || 0) * 0.001);
+    sc.potatoMesh.rotation.set(sc.rotX, sc.rotY, p.rotation || 0);
+
+    const cook = Math.max(0, Number(p.cookLevel) || 0);
+    const material = sc.potatoMesh.material;
+    if (cook < 38) {
+      material.color.setHex(0xFFFFFF);
+      material.roughness = 0.84;
+      material.emissive.setHex(0x000000);
+      material.emissiveIntensity = 0;
+      sc.sparkles.material.opacity = 0;
+    } else if (cook <= 85) {
+      material.color.setHex(0xE5B05F);
+      material.roughness = 0.58;
+      material.emissive.setHex(0x5A2308);
+      material.emissiveIntensity = 0.1;
+      sc.sparkles.material.opacity = 0.36;
+      sc.sparkles.rotation.y += 0.025;
+      sc.sparkles.rotation.z += 0.018;
+    } else {
+      material.color.setHex(0x493027);
+      material.roughness = 0.98;
+      material.emissive.setHex(0x170905);
+      material.emissiveIntensity = 0.035;
+      sc.sparkles.material.opacity = 0;
+    }
+    sc.renderer.render(sc.scene, sc.camera);
   }
 
   startHotPotatoLoop() {
-    if (this.activeLoops.hotPotato) cancelAnimationFrame(this.activeLoops.hotPotato);
-
-    const loop = () => {
-      const sc = this.activeScenes.hotPotato;
-      if (!sc) return;
-
-      const p = sc.potatoState;
-      if (p) {
-        // Sync 3D potato coordinates to 2D physics
-        sc.potatoMesh.position.x = p.x;
-        sc.potatoMesh.position.y = p.y;
-
-        // Dynamic 3D tumbling rotation matching physics velocity
-        sc.rotX += (p.vx || 0) * 0.035;
-        sc.rotY += 0.025;
-        sc.potatoMesh.rotation.x = sc.rotX;
-        sc.potatoMesh.rotation.y = sc.rotY;
-        sc.potatoMesh.rotation.z = p.rotation || 0;
-
-        // PBR Roasting State Shading
-        const cook = p.cookLevel || 0;
-        const mat = sc.potatoMesh.material;
-        if (cook < 38) {
-          // Raw russet state
-          mat.color.setHex(0xD4A373);
-          mat.roughness = 0.78;
-          mat.emissive.setHex(0x000000);
-          mat.emissiveIntensity = 0;
-          sc.sparkles.material.opacity = 0;
-        } else if (cook <= 85) {
-          // Golden crispy state
-          mat.color.setHex(0xF59E0B);
-          mat.roughness = 0.52;
-          mat.emissive.setHex(0xFF8800);
-          mat.emissiveIntensity = 0.45;
-          sc.sparkles.material.opacity = 0.85;
-          sc.sparkles.rotation.y += 0.06;
-          sc.sparkles.rotation.z += 0.04;
-        } else {
-          // Burnt charcoal state
-          mat.color.setHex(0x2D1A10);
-          mat.roughness = 0.95;
-          mat.emissive.setHex(0x551100);
-          mat.emissiveIntensity = 0.2;
-          sc.sparkles.material.opacity = 0;
-        }
-      }
-
-      sc.renderer.render(sc.scene, sc.camera);
-      if (this.isPageVisible) {
-        this.activeLoops.hotPotato = requestAnimationFrame(loop);
-      }
-    };
-    this.activeLoops.hotPotato = requestAnimationFrame(loop);
+    // Kept as a lifecycle hook: never start a second RAF beside the physics loop.
+    if (this.activeLoops.hotPotato) {
+      cancelAnimationFrame(this.activeLoops.hotPotato);
+      this.activeLoops.hotPotato = null;
+    }
+    const sc = this.activeScenes.hotPotato;
+    if (sc && sc.potatoState) this.updateHotPotato3D(sc.potatoState);
   }
 
   // --------------------------------------------------------
@@ -5956,10 +5943,6 @@ class FusionApp {
         potato.x += potato.vx;
         potato.y += potato.vy;
         potato.rotation += potato.rotSpeed;
-        if (has3DPotato) {
-          this.threeManager.updateHotPotato3D(potato);
-        }
-
         // Left wall bounce
         if (potato.x - potato.radius < 0) {
           potato.x = potato.radius;
@@ -6043,6 +6026,7 @@ class FusionApp {
         }
         const heatBadge = arena.querySelector('#hp-heat-badge');
         if (heatBadge) heatBadge.innerText = `Heat: ${cookPct}%`;
+        if (has3DPotato) this.threeManager.updateHotPotato3D(potato);
         }
       }
 
