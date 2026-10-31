@@ -3393,27 +3393,66 @@ class Fusion3DManager {
   // 1. HOT POTATO RUSH 3D ELEMENT
   // --------------------------------------------------------
   createDeformedPotatoMesh() {
-    const geom = new THREE.DodecahedronGeometry(28, 2);
+    const geom = new THREE.IcosahedronGeometry(28, 5);
     const pos = geom.attributes.position;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i);
       const y = pos.getY(i);
       const z = pos.getZ(i);
-      const sx = x * 1.32;
-      const sy = y * 0.94;
-      const sz = z * 0.90;
-      const bump = Math.sin(x * 0.14 + 1.2) * Math.cos(y * 0.16 + 0.8) * Math.sin(z * 0.18) * 3.8;
-      pos.setXYZ(i, sx + bump, sy + bump * 0.8, sz + bump * 0.7);
+      const wave = 1 + 0.045 * Math.sin(x * 0.23 + z * 0.13) * Math.cos(y * 0.19)
+        + 0.025 * Math.sin(z * 0.34 + y * 0.11);
+      pos.setXYZ(i, x * 1.28 * wave, y * 0.91 * wave, z * 0.94 * wave);
     }
     geom.computeVertexNormals();
+
+    // A subtle procedural russet skin with fine pores and natural colour variation.
+    const skinCanvas = document.createElement('canvas');
+    skinCanvas.width = skinCanvas.height = 512;
+    const skinCtx = skinCanvas.getContext('2d');
+    const skinGradient = skinCtx.createLinearGradient(30, 30, 470, 490);
+    skinGradient.addColorStop(0, '#E9C18E');
+    skinGradient.addColorStop(0.42, '#C58B54');
+    skinGradient.addColorStop(1, '#98603C');
+    skinCtx.fillStyle = skinGradient;
+    skinCtx.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 2300; i++) {
+      const x = Math.random() * 512;
+      const y = Math.random() * 512;
+      const radius = 0.35 + Math.random() * 1.55;
+      skinCtx.fillStyle = i % 4 === 0
+        ? 'rgba(255,235,198,' + (0.05 + Math.random() * 0.12) + ')'
+        : 'rgba(74,39,20,' + (0.035 + Math.random() * 0.105) + ')';
+      skinCtx.beginPath();
+      skinCtx.ellipse(x, y, radius * 1.7, radius, Math.random() * Math.PI, 0, Math.PI * 2);
+      skinCtx.fill();
+    }
+    const skinTexture = new THREE.CanvasTexture(skinCanvas);
+    skinTexture.encoding = THREE.sRGBEncoding;
     const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(0xD4A373),
-      roughness: 0.78,
-      metalness: 0.08,
-      flatShading: false
+      color: 0xFFFFFF,
+      map: skinTexture,
+      bumpMap: skinTexture,
+      bumpScale: 0.48,
+      roughness: 0.88,
+      metalness: 0.0
     });
     const mesh = new THREE.Mesh(geom, mat);
     mesh.castShadow = true;
+
+    // Small natural potato eyes/pits are attached to the same rotating 3D mesh.
+    const pitMat = new THREE.MeshStandardMaterial({ color: 0x704325, roughness: 0.98 });
+    for (let i = 0; i < 24; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos((Math.random() * 2) - 1);
+      const nx = Math.sin(phi) * Math.cos(theta);
+      const ny = Math.cos(phi);
+      const nz = Math.sin(phi) * Math.sin(theta);
+      const pit = new THREE.Mesh(new THREE.SphereGeometry(0.72 + Math.random() * 0.38, 8, 6), pitMat);
+      pit.position.set(nx * 36.2, ny * 25.7, nz * 26.5);
+      pit.scale.set(1.35, 0.48, 0.82);
+      pit.lookAt(nx * 60, ny * 60, nz * 60);
+      mesh.add(pit);
+    }
     return mesh;
   }
 
@@ -4922,6 +4961,7 @@ class FusionApp {
         sound.playClick();
         this.selectedDishIndex = parseInt(btn.getAttribute('data-dish-idx'));
         this.buildDishSelectedIngredients = [];
+        this.buildDishPreviewIngredient = null;
         this.lastPantryFeedback = '';
         this.renderBuildDishGame(arena);
       });
@@ -4932,12 +4972,13 @@ class FusionApp {
       btn.addEventListener('click', () => {
         const name = btn.getAttribute('data-ing-name');
         const isCorrect = btn.getAttribute('data-is-correct') === 'true';
+        this.buildDishPreviewIngredient = name;
+        this.update3DIngredient(name);
+        this.animate3DIngredientJump();
 
         if (isCorrect) {
           sound.playCorrect();
           this.buildDishSelectedIngredients.push(name);
-          this.update3DIngredient(name);
-          this.animate3DIngredientJump();
           this.lastPantryFeedback = `<span style="color:var(--accent-green);">✨ Great choice! Added ${name} to the prep bowl.</span>`;
           feedbackBox.innerHTML = this.lastPantryFeedback;
           
@@ -5502,8 +5543,6 @@ class FusionApp {
         <div class="hot-potato-arena-wrapper">
           <div class="hot-potato-canvas-container" id="hp-canvas-container">
             <canvas id="hot-potato-canvas" width="800" height="460"></canvas>
-            <canvas id="hp-three-canvas" width="800" height="460" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:2;"></canvas>
-            <canvas id="hp-3d-game-canvas" width="800" height="460" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;"></canvas>
             <div class="hot-potato-overlay" id="hp-start-overlay">
               <div class="hp-overlay-card">
                 <div class="hp-overlay-icon" style="animation:hpTumble 1.8s infinite ease-in-out;">🥔</div>
@@ -5610,8 +5649,10 @@ class FusionApp {
       served: false
     };
 
+    let has3DPotato = false;
     if (this.threeManager && this.threeManager.isSupported()) {
       this.threeManager.initHotPotato3D(arena.querySelector('#hp-canvas-container'), potato);
+      has3DPotato = !!(this.threeManager.activeScenes && this.threeManager.activeScenes.hotPotato);
     }
 
     // Particles array for sizzles and sparkles
@@ -5911,7 +5952,6 @@ class FusionApp {
 
     // Physics Engine Loop with Adaptive Gravity
     const gravity = diff.hpGravity;
-    const threePotato = this.init3DHotPotato(arena.querySelector('#hp-canvas-container'));
 
     const updateLoop = () => {
       if (isPlaying) {
@@ -5919,9 +5959,6 @@ class FusionApp {
         paintTimer();
         if (timeRemainingMs <= 0) {
           gameOver('time');
-        }
-        if (isPlaying && threePotato) {
-          threePotato.update(potato.x, potato.y, potato.vx, potato.vy, potato.cookLevel);
         }
         if (isPlaying) {
         // Apply Gravity
@@ -6097,60 +6134,64 @@ class FusionApp {
         ctx.globalAlpha = 1.0;
       }
 
-      // 4. Draw Potato with Color Dynamics
-      ctx.save();
-      ctx.translate(potato.x, potato.y);
-      ctx.rotate(potato.rotation);
+      // Keep a simple 2D fallback only on browsers without a working WebGL renderer.
+      if (!has3DPotato) {
+        // 4. Draw Potato with Color Dynamics
+        ctx.save();
+        ctx.translate(potato.x, potato.y);
+        ctx.rotate(potato.rotation);
 
-      // Color based on cooking level
-      let potatoFill = '#E2B878'; // Raw russet skin
-      let potatoStroke = '#8C6030';
-      if (potato.cookLevel >= 38 && potato.cookLevel <= 85) {
-        potatoFill = '#F59E0B'; // Golden fried/roasted
-        potatoStroke = '#B45309';
-      } else if (potato.cookLevel > 85) {
-        potatoFill = '#4B2515'; // Dark burning
-        potatoStroke = '#1F110B';
-      }
+        // Color based on cooking level
+        let potatoFill = '#E2B878'; // Raw russet skin
+        let potatoStroke = '#8C6030';
+        if (potato.cookLevel >= 38 && potato.cookLevel <= 85) {
+          potatoFill = '#F59E0B'; // Golden fried/roasted
+          potatoStroke = '#B45309';
+        } else if (potato.cookLevel > 85) {
+          potatoFill = '#4B2515'; // Dark burning
+          potatoStroke = '#1F110B';
+        }
 
-      // Potato Body (Slightly irregular oval)
-      ctx.fillStyle = potatoFill;
-      ctx.strokeStyle = potatoStroke;
-      ctx.lineWidth = 3.5;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, potato.radius + 4, potato.radius - 3, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-
-      // Potato Spots / Texture
-      ctx.fillStyle = potatoStroke;
-      ctx.beginPath();
-      ctx.arc(-10, -6, 2.5, 0, Math.PI * 2);
-      ctx.arc(8, 7, 2, 0, Math.PI * 2);
-      ctx.arc(12, -8, 2.5, 0, Math.PI * 2);
-      ctx.arc(-6, 9, 2, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Golden Steam / Glow
-      if (potato.cookLevel >= 38 && potato.cookLevel <= 85) {
-        ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
+        // Potato Body (Slightly irregular oval)
+        ctx.fillStyle = potatoFill;
+        ctx.strokeStyle = potatoStroke;
+        ctx.lineWidth = 3.5;
         ctx.beginPath();
-        ctx.arc(0, 0, potato.radius + 9, 0, Math.PI * 2);
+        ctx.ellipse(0, 0, potato.radius + 4, potato.radius - 3, 0, 0, Math.PI * 2);
         ctx.fill();
+        ctx.stroke();
+
+        // Potato Spots / Texture
+        ctx.fillStyle = potatoStroke;
+        ctx.beginPath();
+        ctx.arc(-10, -6, 2.5, 0, Math.PI * 2);
+        ctx.arc(8, 7, 2, 0, Math.PI * 2);
+        ctx.arc(12, -8, 2.5, 0, Math.PI * 2);
+        ctx.arc(-6, 9, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Golden Steam / Glow
+        if (potato.cookLevel >= 38 && potato.cookLevel <= 85) {
+          ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
+          ctx.beginPath();
+          ctx.arc(0, 0, potato.radius + 9, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Potato Face
+        ctx.fillStyle = '#1A1108';
+        ctx.beginPath();
+        ctx.arc(-8, -2, 2.8, 0, Math.PI * 2); // left eye
+        ctx.arc(8, -2, 2.8, 0, Math.PI * 2);  // right eye
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(0, 4, 4, 0, Math.PI); // smile
+        ctx.stroke();
+
+        ctx.restore();
       }
 
-      // Potato Face
-      ctx.fillStyle = '#1A1108';
-      ctx.beginPath();
-      ctx.arc(-8, -2, 2.8, 0, Math.PI * 2); // left eye
-      ctx.arc(8, -2, 2.8, 0, Math.PI * 2);  // right eye
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.arc(0, 4, 4, 0, Math.PI); // smile
-      ctx.stroke();
-
-      ctx.restore();
 
       // Next frame; stop scheduling work once this arena has been replaced.
       if (!canvas.isConnected) {
@@ -7090,6 +7131,23 @@ class FusionApp {
               </div>
             </div>
 
+            <div class="plating-studio">
+              <div class="plating-studio-heading">🍽️ Choose your serveware</div>
+              <div class="serveware-toggle" role="group" aria-label="Choose plate or tray">
+                <button type="button" class="serveware-btn active" data-serveware="plate">Round ceramic plate</button>
+                <button type="button" class="serveware-btn" data-serveware="tray">Rectangular steel tray</button>
+              </div>
+              <label class="plating-animation-toggle">
+                <input type="checkbox" id="tandoor-plating-animation-toggle" checked>
+                <span>Animate food landing on the serveware</span>
+              </label>
+              <div id="tandoor-plating-stage" class="tandoor-plating-stage" data-serveware="plate" aria-live="polite">
+                <div class="plating-vessel" id="tandoor-plating-vessel">
+                  <span class="plating-placeholder">Your golden skewer will be plated here</span>
+                </div>
+              </div>
+            </div>
+
             <div style="display:flex; gap:0.6rem; margin-top:0.5rem; flex-wrap:wrap;">
               <button class="btn btn-primary" id="btn-plate-tandoor-dish" style="flex:1; min-width:180px; padding:0.6rem 1rem; font-weight:700;">
                 🍽️ Plate & Save Creation!
@@ -7112,6 +7170,17 @@ class FusionApp {
     let isOverCoals = false;
     let cookInterval = null;
     let selectedGarnish = 'Mint Coriander Chutney';
+    let selectedServeware = 'plate';
+    const platingStage = stage.querySelector('#tandoor-plating-stage');
+    const platingVessel = stage.querySelector('#tandoor-plating-vessel');
+    stage.querySelectorAll('.serveware-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sound.playClick();
+        selectedServeware = btn.getAttribute('data-serveware') === 'tray' ? 'tray' : 'plate';
+        stage.querySelectorAll('.serveware-btn').forEach(option => option.classList.toggle('active', option === btn));
+        if (platingStage) platingStage.setAttribute('data-serveware', selectedServeware);
+      });
+    });
     const statusPill = stage.querySelector('#skewer-cook-status');
     const timerText = stage.querySelector('#skewer-roast-timer');
     const stickWrap = stage.querySelector('#skewer-stick-wrap');
@@ -7237,10 +7306,38 @@ class FusionApp {
         showToast('Skewer burnt past perfection! (-10 XP)', 'warning');
       }
 
+      const animatePlating = !!stage.querySelector('#tandoor-plating-animation-toggle')?.checked;
+      const servewareLabel = selectedServeware === 'tray' ? 'Steel serving tray' : 'Round ceramic plate';
+      if (platingVessel) {
+        const foodIcons = {
+          paneer: '🧀',
+          pepper: '🫑',
+          pineapple: '🍍',
+          mushroom: '🍄',
+          green_pepper: '🫑'
+        };
+        const platedPieces = Array.from(pieces).map((piece, index) => {
+          const icon = foodIcons[piece.getAttribute('data-piece')] || '🥘';
+          const motionClass = animatePlating ? ' is-plating' : '';
+          return '<span class="plating-food-piece' + motionClass + '" style="--piece-index:' + index + ';">' + icon + '</span>';
+        }).join('');
+        platingVessel.innerHTML =
+          '<span class="plating-garnish-splash" aria-hidden="true">✦ ✧ ✦</span>' +
+          platedPieces +
+          '<span class="plating-garnish-label">' + selectedGarnish + '</span>';
+        if (animatePlating) {
+          window.setTimeout(() => {
+            platingVessel.querySelectorAll('.plating-food-piece').forEach(item => item.classList.remove('is-plating'));
+          }, 1500);
+        }
+      }
       const dishRecord = {
         dishName: 'Fusion Tandoori Paneer & Pineapple Skewer',
         doneness: donenessStr,
         garnish: selectedGarnish,
+        serveware: selectedServeware,
+        servewareLabel,
+        animatePlating,
         score: scoreEarned,
         timestamp: new Date().toISOString()
       };
@@ -7257,7 +7354,7 @@ class FusionApp {
       // Re-render showcase
       const showcase = stage.querySelector('#plated-dish-showcase');
       if (showcase) {
-        showcase.innerHTML = `🏆 Last Creation: <strong>${dishRecord.dishName}</strong> (${dishRecord.doneness}) with ${dishRecord.garnish} • Scored +${dishRecord.score} XP`;
+        showcase.innerHTML = '🏆 Last Creation: <strong>' + dishRecord.dishName + '</strong> (' + dishRecord.doneness + ') with ' + dishRecord.garnish + ' • Served on a ' + servewareLabel + ' • Scored +' + dishRecord.score + ' XP';
       }
     });
 
@@ -9545,6 +9642,11 @@ Guidelines:
           <span class="model-3d-badge" id="tandoor-skewer-badge" style="background:rgba(30,41,59,0.9); border:1px solid rgba(255,255,255,0.18); color:#F8FAFC; transition:all 0.3s;">🍢 Skewer: Resting (Click Roast)</span>
         </div>
       </div>
+      <div class="tandoor-view-controls" role="group" aria-label="Tandoor camera controls">
+        <button type="button" id="tandoor-camera-zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" id="tandoor-camera-reset" aria-label="Reset 3D view" title="Reset view">Reset view</button>
+        <button type="button" id="tandoor-camera-zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+      </div>
 
       <!-- Floating sensory feedback popups container -->
       <div id="tandoor-floating-feedback" style="position:absolute; top:28%; left:50%; width:0; height:0; pointer-events:none; z-index:30;"></div>
@@ -9605,8 +9707,15 @@ Guidelines:
 
     const isMobileStage = width < 640;
     const camera = new THREE.PerspectiveCamera(isMobileStage ? 52 : 44, width / height, 0.1, 1100);
-    camera.position.set(0, isMobileStage ? 104 : 72, isMobileStage ? 268 : 158);
-    camera.lookAt(0, isMobileStage ? -8 : -6, 0);
+    const baseCameraHeight = isMobileStage ? 104 : 72;
+    const baseCameraDistance = isMobileStage ? 268 : 158;
+    const cameraTargetY = isMobileStage ? -8 : -6;
+    let cameraZoom = 1;
+    const applyTandoorCameraZoom = () => {
+      camera.position.set(0, baseCameraHeight / cameraZoom, baseCameraDistance / cameraZoom);
+      camera.lookAt(0, cameraTargetY, 0);
+    };
+    applyTandoorCameraZoom();
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobileStage ? 1.4 : 2));
@@ -9619,6 +9728,31 @@ Guidelines:
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.cursor = 'grab';
     container.insertBefore(renderer.domElement, container.firstChild);
+    renderer.domElement.style.touchAction = 'none';
+
+    const setTandoorZoom = (factor) => {
+      cameraZoom = THREE.MathUtils.clamp(cameraZoom * factor, 0.68, 1.8);
+      applyTandoorCameraZoom();
+    };
+    container.querySelector('#tandoor-camera-zoom-in')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setTandoorZoom(1.12);
+    });
+    container.querySelector('#tandoor-camera-zoom-out')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      setTandoorZoom(0.89);
+    });
+    container.querySelector('#tandoor-camera-reset')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      cameraZoom = 1;
+      applyTandoorCameraZoom();
+      tandoorGroup.rotation.set(0, 0, 0);
+      coalsGroup.rotation.set(0, 0, 0);
+    });
+    renderer.domElement.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      setTandoorZoom(event.deltaY < 0 ? 1.08 : 0.93);
+    }, { passive: false });
 
     // 1. Traditional Punjabi Clay Tandoor Hearth
     const tandoorGroup = new THREE.Group();
@@ -10464,21 +10598,40 @@ Guidelines:
       }
     });
 
-    // Touch/drag orbit on tandoor pot or horizontal swipe to roll skewer
+    // Drag the hearth in both axes for a clearer inspection from desktop or touch.
     let isDragging = false;
-    let prevX = 0;
-    renderer.domElement.addEventListener('pointerdown', (e) => {
+    let previousX = 0;
+    let previousY = 0;
+    let activePointerId = null;
+    const finishTandoorDrag = (event) => {
+      if (activePointerId !== null && event && event.pointerId !== undefined && event.pointerId !== activePointerId) return;
+      isDragging = false;
+      activePointerId = null;
+      renderer.domElement.style.cursor = 'grab';
+    };
+    renderer.domElement.addEventListener('pointerdown', (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
       isDragging = true;
-      prevX = e.clientX;
+      activePointerId = event.pointerId;
+      previousX = event.clientX;
+      previousY = event.clientY;
+      renderer.domElement.style.cursor = 'grabbing';
+      try { renderer.domElement.setPointerCapture(event.pointerId); } catch (error) {}
     });
-    window.addEventListener('pointermove', (e) => {
-      if (!isDragging) return;
-      const dx = e.clientX - prevX;
-      prevX = e.clientX;
+    renderer.domElement.addEventListener('pointermove', (event) => {
+      if (!isDragging || (activePointerId !== null && event.pointerId !== activePointerId)) return;
+      const dx = event.clientX - previousX;
+      const dy = event.clientY - previousY;
+      previousX = event.clientX;
+      previousY = event.clientY;
       tandoorGroup.rotation.y += dx * 0.008;
       coalsGroup.rotation.y += dx * 0.008;
+      tandoorGroup.rotation.x = THREE.MathUtils.clamp(tandoorGroup.rotation.x + dy * 0.004, -0.3, 0.3);
+      coalsGroup.rotation.x = THREE.MathUtils.clamp(coalsGroup.rotation.x + dy * 0.004, -0.3, 0.3);
     });
-    window.addEventListener('pointerup', () => { isDragging = false; });
+    renderer.domElement.addEventListener('pointerup', finishTandoorDrag);
+    renderer.domElement.addEventListener('pointercancel', finishTandoorDrag);
+    renderer.domElement.addEventListener('lostpointercapture', finishTandoorDrag);
 
     // 8. Real-Time Rendering & Animation Loop
     const animate = () => {
@@ -10631,8 +10784,7 @@ Guidelines:
       if (w === 0 || h === 0) return;
       const mobileStage = w < 640;
       camera.fov = mobileStage ? 52 : 44;
-      camera.position.set(0, mobileStage ? 104 : 72, mobileStage ? 268 : 158);
-      camera.lookAt(0, mobileStage ? -8 : -6, 0);
+      applyTandoorCameraZoom();
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobileStage ? 1.4 : 2));
@@ -10680,13 +10832,21 @@ Guidelines:
     const previous = this.active3DScenes.get('dishIngredient');
     if (previous?.dispose) previous.dispose();
     this.active3DScenes.delete('dishIngredient');
+    const initialIngredient = this.buildDishPreviewIngredient
+      || (this.buildDishSelectedIngredients || []).slice(-1)[0]
+      || 'King Oyster Mushrooms';
 
     container.innerHTML = `
       <div class="model-3d-hud">
-        <span class="model-3d-badge" id="dish-3d-badge">🍄 King Oyster Mushroom</span>
+        <span class="model-3d-badge" id="dish-3d-badge">🌿 ${initialIngredient}</span>
         <span class="model-3d-badge" id="dish-3d-status">Drag to rotate · 360°</span>
       </div>
-      <div class="model-3d-hint">Drag to inspect the ingredient · Auto-rotating</div>
+      <div class="dish-3d-view-controls" role="group" aria-label="Ingredient model zoom">
+        <button type="button" id="dish-3d-zoom-out" aria-label="Zoom out" title="Zoom out">−</button>
+        <button type="button" id="dish-3d-zoom-reset" aria-label="Reset zoom" title="Reset zoom">Reset</button>
+        <button type="button" id="dish-3d-zoom-in" aria-label="Zoom in" title="Zoom in">+</button>
+      </div>
+      <div class="model-3d-hint">Drag to rotate · Scroll or use + / − to zoom</div>
     `;
 
     const width = Math.max(1, container.clientWidth || 420);
@@ -10697,8 +10857,13 @@ Guidelines:
     scene.background = new THREE.Color(isDark ? 0x11141c : 0xf1eee8);
 
     const camera = new THREE.PerspectiveCamera(38, width / height, 0.1, 500);
-    camera.position.set(0, 13, isMobile ? 78 : 72);
-    camera.lookAt(0, 0, 0);
+    const cameraBaseDistance = isMobile ? 78 : 72;
+    let cameraZoom = 1;
+    const applyCameraZoom = () => {
+      camera.position.set(0, 13 / cameraZoom, cameraBaseDistance / cameraZoom);
+      camera.lookAt(0, 0, 0);
+    };
+    applyCameraZoom();
 
     const renderer = new THREE.WebGLRenderer({
       antialias: !isMobile,
@@ -10714,6 +10879,28 @@ Guidelines:
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.domElement.style.cssText = 'width:100%;height:100%;display:block;touch-action:pan-y;cursor:grab;';
     container.insertBefore(renderer.domElement, container.firstChild);
+
+    const adjustDishZoom = (factor) => {
+      cameraZoom = THREE.MathUtils.clamp(cameraZoom * factor, 0.68, 1.75);
+      applyCameraZoom();
+    };
+    container.querySelector('#dish-3d-zoom-in')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      adjustDishZoom(1.12);
+    });
+    container.querySelector('#dish-3d-zoom-out')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      adjustDishZoom(0.89);
+    });
+    container.querySelector('#dish-3d-zoom-reset')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      cameraZoom = 1;
+      applyCameraZoom();
+    });
+    renderer.domElement.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      adjustDishZoom(event.deltaY < 0 ? 1.08 : 0.93);
+    }, { passive: false });
 
     const hemi = new THREE.HemisphereLight(0xfff5e7, isDark ? 0x24202a : 0x8a8175, 1.8);
     scene.add(hemi);
@@ -10875,6 +11062,168 @@ Guidelines:
         group.add(mesh);
         return mesh;
       };
+      const sphere = (mat, position, scale, radius = 10) =>
+        add(new THREE.SphereGeometry(radius, 40, 28), mat, position, scale);
+      const leafMat = makeMaterial('fresh-leaf', '#397947', '#8bc477', '#1c4e32', { roughness: 0.68, bumpScale: 0.12 });
+      const rootMat = makeMaterial('root-skin', '#ad7546', '#dca66c', '#694126', { roughness: 0.88, bumpScale: 0.36 });
+      const paleMat = makeMaterial('paneer-curd', '#f1e5bd', '#fff8e6', '#cfbd92', { roughness: 0.72, bumpScale: 0.26 });
+      const goldMat = makeMaterial('golden-roast', '#bf781d', '#f4c15f', '#714016', { roughness: 0.54, bumpScale: 0.22, clearcoat: 0.3 });
+      const addLeaf = (x, y, z, size = 1, angle = 0) => {
+        const leaf = sphere(leafMat, [x, y, z], [1.2 * size, 0.28 * size, 0.58 * size], 6);
+        leaf.rotation.z = angle;
+        leaf.rotation.y = angle * 0.7;
+        return leaf;
+      };
+      const addHerbSprig = (count = 7) => {
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x6d8e50, roughness: 0.8 });
+        for (let i = 0; i < count; i++) {
+          const angle = i * Math.PI * 2 / count;
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(0, -10, 0),
+            new THREE.Vector3(Math.cos(angle) * 4, -2, 1),
+            new THREE.Vector3(Math.cos(angle) * 11, 5 + (i % 2) * 2, Math.sin(angle) * 4)
+          ]);
+          add(new THREE.TubeGeometry(curve, 18, 0.3, 6, false), stemMat);
+          addLeaf(Math.cos(angle) * 10, 6 + (i % 2) * 2, Math.sin(angle) * 4, 1, -angle * 0.6);
+        }
+      };
+      const addFlatbread = (base, highlight, detail, diameter = 21) => {
+        const breadMat = makeMaterial('flatbread-' + base, base, highlight, detail, { roughness: 0.84, bumpScale: 0.68 });
+        const geometry = new THREE.CylinderGeometry(diameter, diameter * 0.97, 2.2, 72, 2);
+        const position = geometry.attributes.position;
+        for (let i = 0; i < position.count; i++) {
+          const x = position.getX(i);
+          const z = position.getZ(i);
+          const wave = 1 + 0.025 * Math.sin(x * 0.45) * Math.cos(z * 0.38);
+          position.setXYZ(i, x * wave, position.getY(i) + 0.18 * Math.sin(x * 0.25 + z * 0.2), z * wave);
+        }
+        geometry.computeVertexNormals();
+        add(geometry, breadMat, [0, -7, 0]);
+        const charMat = new THREE.MeshStandardMaterial({ color: 0x6c3b1e, roughness: 0.96 });
+        for (let i = 0; i < 13; i++) {
+          const angle = i * 2.399;
+          const radius = 4 + (i % 4) * 3.5;
+          const mark = add(new THREE.CircleGeometry(0.8 + (i % 3) * 0.45, 12), charMat,
+            [Math.cos(angle) * radius, -5.78, Math.sin(angle) * radius]);
+          mark.rotation.x = -Math.PI / 2;
+        }
+        for (let i = 0; i < 4; i++) addLeaf(-8 + i * 5, -4.8, 3 + (i % 2) * 3, 0.34, i * 0.7);
+      };
+      const addSauceBowl = (base, highlight, detail, garnish = true) => {
+        const bowlMat = new THREE.MeshPhysicalMaterial({ color: 0xf2eee5, roughness: 0.24, metalness: 0.04, clearcoat: 0.55 });
+        const profile = [
+          new THREE.Vector2(0, -10), new THREE.Vector2(9, -10),
+          new THREE.Vector2(12, -7), new THREE.Vector2(14, 0),
+          new THREE.Vector2(12.8, 5), new THREE.Vector2(0, 5)
+        ];
+        add(new THREE.LatheGeometry(profile, 64), bowlMat, [0, -1, 0]);
+        const sauceMat = makeMaterial('sauce-' + base, base, highlight, detail, { roughness: 0.34, bumpScale: 0.18, clearcoat: 0.48 });
+        const surface = add(new THREE.CircleGeometry(12.2, 64), sauceMat, [0, 4.4, 0]);
+        surface.rotation.x = -Math.PI / 2;
+        const swirlPoints = [];
+        for (let i = 0; i <= 48; i++) {
+          const angle = (i / 48) * Math.PI * 4;
+          const radius = 1 + (i / 48) * 8.8;
+          swirlPoints.push(new THREE.Vector3(Math.cos(angle) * radius, 4.65, Math.sin(angle) * radius));
+        }
+        const swirlMat = new THREE.MeshStandardMaterial({ color: 0xffedbd, roughness: 0.42 });
+        add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(swirlPoints), 96, 0.28, 6, false), swirlMat);
+        if (garnish) {
+          for (let i = 0; i < 12; i++) {
+            const angle = i * 2.4;
+            addLeaf(Math.cos(angle) * (5 + (i % 3) * 1.8), 5.1, Math.sin(angle) * (5 + (i % 3) * 1.8), 0.36, angle);
+          }
+        }
+      };
+      const addBottle = (base, highlight, detail) => {
+        const liquidMat = makeMaterial('bottled-' + base, base, highlight, detail, { roughness: 0.22, bumpScale: 0.12, clearcoat: 0.7 });
+        const glassMat = new THREE.MeshPhysicalMaterial({ color: 0xe4e7e9, transparent: true, opacity: 0.28, roughness: 0.12, metalness: 0.05 });
+        add(new THREE.CylinderGeometry(7, 8, 21, 40), glassMat, [0, -1, 0]);
+        add(new THREE.CylinderGeometry(6.6, 7.2, 15, 40), liquidMat, [0, -4, 0]);
+        add(new THREE.CylinderGeometry(2.8, 3.2, 5, 24), glassMat, [0, 12, 0]);
+        add(new THREE.CylinderGeometry(3.2, 3.2, 4, 24), new THREE.MeshStandardMaterial({ color: 0x29313b, roughness: 0.35 }), [0, 16, 0]);
+        add(new THREE.TorusGeometry(7.2, 0.55, 8, 40), new THREE.MeshStandardMaterial({ color: 0xd5d9df, metalness: 0.75, roughness: 0.25 }), [0, 9, 0]);
+      };
+      const addNoodles = (count = 4, color = '#e9c77d') => {
+        const noodleMat = makeMaterial('noodle-' + color, color, '#fff0c3', '#9b733c', { roughness: 0.62, bumpScale: 0.12 });
+        for (let n = 0; n < count; n++) {
+          const points = [];
+          const turns = 2.2 + n * 0.12;
+          for (let i = 0; i <= 80; i++) {
+            const t = i / 80;
+            const a = t * Math.PI * 2 * turns + n * 0.8;
+            const r = 5 + t * 12;
+            points.push(new THREE.Vector3(Math.cos(a) * r, -2 + n * 1.5 + Math.sin(t * Math.PI * 2) * 1.2, Math.sin(a) * r));
+          }
+          const curve = new THREE.CatmullRomCurve3(points);
+          add(new THREE.TubeGeometry(curve, 100, 1.05, 8, false), noodleMat);
+        }
+      };
+      const addCorn = () => {
+        const kernelMat = makeMaterial('corn-kernels', '#e7a91d', '#ffe27a', '#a75d13', { roughness: 0.45, bumpScale: 0.12, clearcoat: 0.2 });
+        add(new THREE.CylinderGeometry(6.5, 7.5, 25, 32), kernelMat, [0, 0, 0]);
+        for (let row = 0; row < 7; row++) {
+          const y = -10 + row * 3.2;
+          for (let col = 0; col < 12; col++) {
+            const angle = col * Math.PI * 2 / 12 + (row % 2) * 0.22;
+            sphere(kernelMat, [Math.cos(angle) * 6.1, y, Math.sin(angle) * 6.1], [0.42, 0.58, 0.42], 1.5);
+          }
+        }
+        const huskMat = makeMaterial('corn-husk', '#3d7c3c', '#83b65d', '#214d2a', { roughness: 0.82 });
+        for (let i = 0; i < 4; i++) {
+          const leaf = add(new THREE.ConeGeometry(2.3, 23, 16), huskMat, [
+            Math.cos(i * Math.PI / 2) * 3.6, -15, Math.sin(i * Math.PI / 2) * 3.6
+          ]);
+          leaf.rotation.z = Math.cos(i * Math.PI / 2) * 0.45;
+          leaf.rotation.x = Math.sin(i * Math.PI / 2) * 0.45;
+        }
+      };
+      const addBellPepper = (colorKey = 'red') => {
+        const palette = colorKey === 'green'
+          ? ['#216f3b', '#71b85a', '#12472b']
+          : colorKey === 'yellow'
+            ? ['#c18b19', '#f5d75f', '#8a5416']
+            : ['#a9212c', '#f16a4f', '#651a22'];
+        const mat = makeMaterial('bell-pepper-' + colorKey, palette[0], palette[1], palette[2], { roughness: 0.3, bumpScale: 0.15, clearcoat: 0.5 });
+        const geometry = new THREE.SphereGeometry(14, 56, 40);
+        const position = geometry.attributes.position;
+        for (let i = 0; i < position.count; i++) {
+          const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+          const theta = Math.atan2(z, x);
+          const lobe = 1 + 0.11 * Math.cos(theta * 4) * Math.pow(Math.max(0.05, 1 - Math.abs(y) / 14), 0.5);
+          position.setXYZ(i, x * lobe, y * (1 + 0.035 * Math.cos(theta * 4)), z * lobe);
+        }
+        geometry.computeVertexNormals();
+        add(geometry, mat, [0, 0, 0], [1, 0.92, 0.9]);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x35683b, roughness: 0.7 });
+        add(new THREE.CylinderGeometry(0.8, 1.4, 5, 12), stemMat, [0, 14, 0]);
+        for (let i = 0; i < 4; i++) {
+          const calyx = add(new THREE.ConeGeometry(1.5, 5, 10), stemMat,
+            [Math.cos(i * Math.PI / 2) * 2.1, 11.3, Math.sin(i * Math.PI / 2) * 2.1]);
+          calyx.rotation.z = (i - 1.5) * 0.2;
+        }
+      };
+      const addPotato = (sweet = false) => {
+        const mat = makeMaterial(sweet ? 'sweet-potato-skin' : 'russet-potato-skin',
+          sweet ? '#9d593b' : '#a87548', sweet ? '#d58b55' : '#d9ae7b', '#603b2b',
+          { roughness: 0.86, bumpScale: 0.58 });
+        const geometry = new THREE.SphereGeometry(14, 56, 40);
+        const position = geometry.attributes.position;
+        for (let i = 0; i < position.count; i++) {
+          const x = position.getX(i), y = position.getY(i), z = position.getZ(i);
+          const wobble = 1 + 0.055 * Math.sin(x * 0.22 + y * 0.12) * Math.cos(z * 0.2);
+          position.setXYZ(i, x * 1.55 * wobble, y * 0.82 * wobble, z * 0.88 * wobble);
+        }
+        geometry.computeVertexNormals();
+        add(geometry, mat);
+        const eyeMat = new THREE.MeshStandardMaterial({ color: 0x603a26, roughness: 0.95 });
+        for (let i = 0; i < 16; i++) {
+          const a = i * 2.4;
+          const x = Math.cos(a) * (8 + (i % 3) * 3);
+          const z = Math.sin(a) * (7 + (i % 4) * 2);
+          sphere(eyeMat, [x, Math.sin(a * 0.7) * 8, z], [0.85, 0.42, 0.72], 0.8);
+        }
+      };
 
       if (name.includes('mushroom') || name.includes('oyster') || name.includes('shroom')) {
         const stemMat = new THREE.MeshPhysicalMaterial({ color: 0xf1e8d8, roughness: 0.78, bumpScale: 0.12 });
@@ -10887,10 +11236,6 @@ Guidelines:
         const capMat = makeMaterial('mushroom-cap', '#9a6b42', '#c18d5b', '#4d3024', { roughness: 0.62, bumpScale: 0.3 });
         const cap = add(new THREE.SphereGeometry(15, 72, 48, 0, Math.PI * 2, 0, Math.PI / 2), capMat, [0, 7, 0], [1.12, 0.72, 1.08]);
         cap.rotation.z = -0.08;
-        const underside = new THREE.Mesh(new THREE.CircleGeometry(14.7, 64), new THREE.MeshStandardMaterial({ color: 0xe7d8c5, roughness: 0.82, side: THREE.DoubleSide }));
-        underside.rotation.x = -Math.PI / 2;
-        underside.position.y = 7.05;
-        group.add(underside);
         const gillMat = new THREE.LineBasicMaterial({ color: 0xbda58e, transparent: true, opacity: 0.68 });
         for (let i = 0; i < 38; i++) {
           const angle = i * Math.PI * 2 / 38;
@@ -10900,18 +11245,40 @@ Guidelines:
           ];
           group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), gillMat));
         }
-      } else if (name.includes('lime') || name.includes('lemon') || name.includes('citrus')) {
+      } else if (name.includes('citrus') || name.includes('lime') || name.includes('lemon')) {
         const citrusMat = makeMaterial('citrus-peel', '#79a936', '#c4d85b', '#426c2d', { roughness: 0.38, bumpScale: 0.52, clearcoat: 0.42 });
-        add(new THREE.SphereGeometry(13, 72, 56), citrusMat, [0, 0, 0], [1.18, 0.82, 0.92]);
-        const pith = new THREE.Mesh(new THREE.SphereGeometry(8.2, 48, 32), new THREE.MeshStandardMaterial({ color: 0xe9e1b8, roughness: 0.8 }));
-        pith.scale.set(1.1, 0.8, 0.88);
-        pith.position.set(0, 0, 3.5);
-        group.add(pith);
-        const pulpMat = makeMaterial('citrus-pulp', '#b8cf60', '#f1e9a5', '#7c9c38', { roughness: 0.42, bumpScale: 0.18 });
-        add(new THREE.CircleGeometry(7.8, 64), pulpMat, [0, 0, 8.0]);
-        const stem = add(new THREE.CylinderGeometry(0.45, 0.8, 3.4, 12), new THREE.MeshStandardMaterial({ color: 0x4a6e32, roughness: 0.72 }), [0, 10.2, 0]);
-        stem.rotation.z = 0.25;
-      } else if (name.includes('chili') || name.includes('mirchi') || name.includes('pepper')) {
+        sphere(citrusMat, [0, 0, 0], [1.18, 0.82, 0.92], 13);
+        const stemMat = new THREE.MeshStandardMaterial({ color: 0x4a6e32, roughness: 0.72 });
+        add(new THREE.CylinderGeometry(0.45, 0.8, 3.4, 12), stemMat, [0, 10.2, 0]);
+        if (name.includes('& ginger')) {
+          const gingerMat = rootMat;
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(-15, -9, 2), new THREE.Vector3(-7, -5, 3),
+            new THREE.Vector3(0, -7, 0), new THREE.Vector3(8, -3, 2), new THREE.Vector3(15, 1, 0)
+          ]);
+          add(new THREE.TubeGeometry(curve, 40, 3.2, 12, false), gingerMat);
+        }
+      } else if (name.includes('puree') || name.includes('gravy') || name.includes('broth') ||
+                 name.includes('curd') || name.includes('cream') || name.includes('yogurt') ||
+                 name.includes('chutney') || name.includes('marinara') || name.includes('jam') ||
+                 name.includes('sauce') || name.includes('paste') || name.includes('stock') ||
+                 name.includes('sesame oil') || name.includes('butter')) {
+        let palette = ['#c47a25', '#f0bc64', '#6f3519'];
+        if (name.includes('green') || name.includes('mint') || name.includes('coriander')) palette = ['#367b45', '#8fbd66', '#1d4c2c'];
+        else if (name.includes('tomato') || name.includes('marinara') || name.includes('tikka')) palette = ['#b73a1e', '#ef8651', '#6c2017'];
+        else if (name.includes('yellow') || name.includes('pepper')) palette = ['#c79c24', '#f7df79', '#825316'];
+        else if (name.includes('cream') || name.includes('curd') || name.includes('yogurt') || name.includes('mayo')) palette = ['#dfd4b7', '#fff7e8', '#b8a982'];
+        else if (name.includes('sesame') || name.includes('oil') || name.includes('butter')) palette = ['#ad791a', '#f2c34a', '#71420f'];
+        else if (name.includes('coconut')) palette = ['#9a713c', '#e6c28d', '#533b28'];
+        addSauceBowl(palette[0], palette[1], palette[2], !name.includes('oil') && !name.includes('broth'));
+      } else if (name.includes('bell pepper') || name.includes('capsicum')) {
+        addBellPepper(name.includes('green') ? 'green' : name.includes('yellow') ? 'yellow' : 'red');
+        if (name.includes('& onion')) {
+          const onionMat = makeMaterial('red-onion-skin', '#9f3153', '#e9a1a9', '#5a203f', { roughness: 0.42, bumpScale: 0.18 });
+          add(new THREE.TorusGeometry(7, 1.8, 16, 64), onionMat, [13, -8, 0]);
+          add(new THREE.TorusGeometry(4.3, 1.2, 16, 48), paleMat, [13, -8, 0.5]);
+        }
+      } else if (name.includes('chili') || name.includes('mirchi') || name.includes('chilli')) {
         const chiliColor = name.includes('red') ? ['#b81f22', '#e84a36', '#681b17'] : ['#c1a52e', '#efe06a', '#7b6d23'];
         const chiliMat = makeMaterial('chili-' + chiliColor[0], chiliColor[0], chiliColor[1], chiliColor[2], { roughness: 0.31, bumpScale: 0.12, clearcoat: 0.5 });
         const curve = new THREE.CatmullRomCurve3([
@@ -10926,16 +11293,67 @@ Guidelines:
           const leaf = add(new THREE.ConeGeometry(1.45, 5.2, 12), stemMat, [-13 + Math.cos(i * 1.25) * 2, 8.4, Math.sin(i * 1.25) * 2]);
           leaf.rotation.z = (i - 2) * 0.5;
         }
-      } else if (name.includes('paneer') || name.includes('cheese') || name.includes('tofu')) {
-        const mat = makeMaterial('paneer-curd', '#f1e5bd', '#fff8e6', '#cfbd92', { roughness: 0.72, bumpScale: 0.26 });
-        const cube = createRoundedPaneer(mat);
-        cube.rotation.set(-0.12, 0.25, 0.09);
-        group.add(cube);
-        const herbs = new THREE.MeshStandardMaterial({ color: 0x536f32, roughness: 0.9 });
-        for (let i = 0; i < 8; i++) {
-          const fleck = add(new THREE.SphereGeometry(0.28 + Math.random() * 0.24, 8, 6), herbs,
-            [(Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13]);
-          fleck.scale.set(1.4, 0.35, 0.9);
+      } else if (name.includes('ginger') || name.includes('garlic')) {
+        if (name.includes('ginger')) {
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(-15, -6, 0), new THREE.Vector3(-9, -2, 1),
+            new THREE.Vector3(-3, -8, 1), new THREE.Vector3(4, -4, 0),
+            new THREE.Vector3(12, 1, 1), new THREE.Vector3(16, 7, 0)
+          ]);
+          add(new THREE.TubeGeometry(curve, 48, 4.2, 16, false), rootMat);
+          sphere(rootMat, [-9, -3, 1], [0.55, 0.48, 0.55], 7);
+          sphere(rootMat, [5, -3, 0], [0.58, 0.5, 0.6], 7);
+        }
+        if (name.includes('garlic')) {
+          const garlicMat = makeMaterial('garlic-clove', '#e9dfc9', '#fff8e9', '#bcae94', { roughness: 0.72, bumpScale: 0.18 });
+          for (let i = 0; i < 6; i++) {
+            const a = i * Math.PI * 2 / 6;
+            sphere(garlicMat, [Math.cos(a) * 7, -2 + Math.sin(a) * 3, Math.sin(a) * 6], [0.62, 1.1, 0.58], 7);
+          }
+          add(new THREE.CylinderGeometry(0.4, 1.0, 5, 10), rootMat, [0, 10, 0]);
+        }
+      } else if (name.includes('chana') || name.includes('chickpea') || name.includes('wasabi pea')) {
+        const chickpeaMat = makeMaterial('roasted-chana', '#b47a36', '#edc17b', '#68401f', { roughness: 0.78, bumpScale: 0.24 });
+        for (let i = 0; i < 22; i++) {
+          const a = i * 2.399;
+          const r = 3 + (i % 5) * 2.3;
+          sphere(chickpeaMat, [Math.cos(a) * r, Math.sin(i * 1.7) * 6, Math.sin(a) * r], [1, 0.86, 0.92], 3.8);
+        }
+      } else if (name.includes('sweet potato') || name === 'potato' || name.includes('potato puree')) {
+        addPotato(true);
+      } else if (name.includes('tomato')) {
+        const tomatoMat = makeMaterial('tomato-skin', '#a8241e', '#ed6650', '#651914', { roughness: 0.32, bumpScale: 0.2, clearcoat: 0.55 });
+        const tomato = sphere(tomatoMat, [0, 0, 0], [1.05, 0.92, 1], 14);
+        tomato.rotation.z = 0.12;
+        const greenMat = new THREE.MeshStandardMaterial({ color: 0x3b7137, roughness: 0.8 });
+        for (let i = 0; i < 5; i++) {
+          const leaf = add(new THREE.ConeGeometry(1.1, 5, 9), greenMat,
+            [Math.cos(i * Math.PI * 0.4) * 2, 13, Math.sin(i * Math.PI * 0.4) * 2]);
+          leaf.rotation.z = 0.6 * Math.cos(i * Math.PI * 0.4);
+        }
+      } else if (name.includes('paneer') || name.includes('tofu') || name.includes('cheese')) {
+        if (name.includes('blue cheese')) {
+          const cheeseMat = makeMaterial('blue-cheese', '#d6d0ae', '#f3edce', '#9c987d', { roughness: 0.72, bumpScale: 0.22 });
+          const wedgeShape = new THREE.Shape();
+          wedgeShape.moveTo(-14, -10); wedgeShape.lineTo(14, -10); wedgeShape.lineTo(10, 11); wedgeShape.lineTo(-10, 9); wedgeShape.closePath();
+          const wedge = add(new THREE.ExtrudeGeometry(wedgeShape, { depth: 12, bevelEnabled: true, bevelSegments: 3, bevelSize: 1.2, bevelThickness: 1.1 }), cheeseMat, [0, 0, -6]);
+          wedge.rotation.set(-0.18, 0.24, 0.06);
+          const veinMat = new THREE.MeshStandardMaterial({ color: 0x5b8c81, roughness: 0.95 });
+          for (let i = 0; i < 18; i++) sphere(veinMat, [(Math.random() - 0.5) * 18, (Math.random() - 0.5) * 12, 7], [0.24, 0.24, 0.24], 1.1);
+        } else if (name.includes('mozzarella')) {
+          const cheeseMat = makeMaterial('mozzarella', '#e8dfc7', '#fff9e9', '#c5b89b', { roughness: 0.48, bumpScale: 0.12 });
+          sphere(cheeseMat, [0, 0, 0], [1.1, 0.85, 1], 13);
+          const torn = add(new THREE.TorusGeometry(7, 1.4, 10, 48), cheeseMat, [0, -7, 0]);
+          torn.rotation.x = 0.3;
+        } else {
+          const mat = makeMaterial('paneer-curd', '#f1e5bd', '#fff8e6', '#cfbd92', { roughness: 0.72, bumpScale: 0.26 });
+          const cube = createRoundedPaneer(mat);
+          cube.rotation.set(-0.12, 0.25, 0.09);
+          group.add(cube);
+          const herbs = new THREE.MeshStandardMaterial({ color: 0x536f32, roughness: 0.9 });
+          for (let i = 0; i < 8; i++) {
+            const fleck = sphere(herbs, [(Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13, (Math.random() - 0.5) * 13], [1.4, 0.35, 0.9], 0.42);
+          }
         }
       } else if (name.includes('onion')) {
         const outer = makeMaterial('red-onion-skin', '#9f3153', '#e9a1a9', '#5a203f', { roughness: 0.42, bumpScale: 0.18 });
@@ -10943,30 +11361,127 @@ Guidelines:
         add(new THREE.TorusGeometry(10, 2.0, 20, 72), outer);
         add(new THREE.TorusGeometry(6.6, 1.4, 16, 64), center, [0, 0, 0.5]);
         add(new THREE.TorusGeometry(3.2, 1.0, 16, 48), outer, [0, 0, 0.9]);
-      } else if (name.includes('herb') || name.includes('coriander') || name.includes('mint')) {
-        const leafMat = makeMaterial('fresh-herb-leaf', '#397947', '#79b86a', '#1b4e34', { roughness: 0.66, bumpScale: 0.12 });
-        const stemMat = new THREE.MeshStandardMaterial({ color: 0x6d8e50, roughness: 0.8 });
-        for (let i = 0; i < 7; i++) {
-          const angle = i * Math.PI * 2 / 7;
-          const curve = new THREE.CatmullRomCurve3([
-            new THREE.Vector3(0, -10, 0),
-            new THREE.Vector3(Math.cos(angle) * 4, -2, 1),
-            new THREE.Vector3(Math.cos(angle) * 11, 5 + (i % 2) * 2, Math.sin(angle) * 4)
-          ]);
-          add(new THREE.TubeGeometry(curve, 18, 0.3, 6, false), stemMat);
-          const leaf = add(new THREE.SphereGeometry(5, 32, 20), leafMat,
-            [Math.cos(angle) * 10, 6 + (i % 2) * 2, Math.sin(angle) * 4], [0.95, 0.24, 0.48]);
-          leaf.rotation.z = -angle * 0.6;
+        if (name.includes('& pepper') || name.includes('bell pepper')) addBellPepper('red');
+      } else if (name.includes('herb') || name.includes('coriander') || name.includes('mint') ||
+                 name.includes('methi') || name.includes('oregano') || name.includes('bok choy')) {
+        addHerbSprig(name.includes('bok choy') ? 5 : 8);
+        if (name.includes('bok choy')) {
+          const stemMat = new THREE.MeshStandardMaterial({ color: 0xe9e3bf, roughness: 0.6 });
+          for (let i = 0; i < 5; i++) {
+            const angle = i * Math.PI * 2 / 5;
+            add(new THREE.CylinderGeometry(1.5, 2.3, 17, 12), stemMat,
+              [Math.cos(angle) * 5, -5, Math.sin(angle) * 5]);
+          }
         }
+      } else if (name.includes('tortilla') || name.includes('naan') || name.includes('paratha') ||
+                 name.includes('flatbread') || name.includes('roti')) {
+        addFlatbread('#c58b4e', '#efd19a', '#754522', 21);
+      } else if (name.includes('noodle') || name.includes('ramen') || name.includes('pasta')) {
+        if (name.includes('penne')) {
+          const pastaMat = makeMaterial('penne-pasta', '#d59b4d', '#f7d28a', '#9b6329', { roughness: 0.54, bumpScale: 0.14 });
+          for (let i = 0; i < 9; i++) {
+            const piece = add(new THREE.CylinderGeometry(2.8, 2.8, 10, 20, 1, true), pastaMat,
+              [(i - 4) * 4.2, Math.sin(i * 2) * 4, (i % 3 - 1) * 4]);
+            piece.rotation.z = 0.65 + (i % 2) * 0.35;
+            piece.rotation.x = 0.45;
+          }
+        } else addNoodles(5, '#e7c77f');
+      } else if (name.includes('corn')) {
+        addCorn();
+        if (name.includes('pepper')) addBellPepper('red');
+        if (name.includes('bok choy')) addHerbSprig(4);
+      } else if (name.includes('biscuit') || name.includes('cookie')) {
+        const biscuitMat = makeMaterial('digestive-biscuit', '#a76a34', '#e0ad72', '#6b3b20', { roughness: 0.86, bumpScale: 0.32 });
+        const biscuit = add(new THREE.CylinderGeometry(12, 12, 3.4, 64), biscuitMat, [0, -2, 0]);
+        for (let i = 0; i < 16; i++) {
+          const a = i * Math.PI * 2 / 16;
+          sphere(rootMat, [Math.cos(a) * 9.7, 0, Math.sin(a) * 9.7], [0.35, 0.25, 0.35], 0.8);
+        }
+        add(new THREE.CylinderGeometry(9, 9, 2.5, 48), paleMat, [0, 1, 0]);
+        biscuit.rotation.y = 0.1;
+      } else if (name.includes('gulab jamun')) {
+        const syrupMat = makeMaterial('gulab-jamun-syrup', '#a64d1d', '#df9a43', '#5a250f', { roughness: 0.28, bumpScale: 0.12, clearcoat: 0.68 });
+        const jamunMat = makeMaterial('gulab-jamun', '#8c3d18', '#d9883d', '#4e2010', { roughness: 0.38, bumpScale: 0.2, clearcoat: 0.48 });
+        add(new THREE.CylinderGeometry(12, 12, 4, 56), syrupMat, [0, -8, 0]);
+        for (let i = 0; i < 4; i++) sphere(jamunMat, [(i - 1.5) * 7, -1 + (i % 2) * 2, (i % 2) * 4 - 2], [1, 0.82, 1], 5.3);
+        for (let i = 0; i < 5; i++) addLeaf(-7 + i * 3.4, 6, 3, 0.2, i * 0.4);
+      } else if (name.includes('pistachio')) {
+        const shellMat = makeMaterial('pistachio-shell', '#b3a45c', '#e4d68e', '#696235', { roughness: 0.82, bumpScale: 0.18 });
+        const kernelMat = makeMaterial('pistachio-kernel', '#7b9847', '#bdc77e', '#3f6331', { roughness: 0.72, bumpScale: 0.1 });
+        for (let i = 0; i < 7; i++) {
+          const a = i * 2.399;
+          const shell = sphere(shellMat, [Math.cos(a) * 7, Math.sin(i * 1.6) * 5, Math.sin(a) * 7], [0.55, 0.38, 1.0], 6);
+          shell.rotation.z = 0.45;
+          sphere(kernelMat, [Math.cos(a) * 7, Math.sin(i * 1.6) * 5, Math.sin(a) * 7 + 1], [0.48, 0.32, 0.85], 5);
+        }
+      } else if (name.includes('saffron') || name.includes('cardamom')) {
+        const podMat = makeMaterial('cardamom-pod', '#708345', '#b1ad61', '#3c4b2b', { roughness: 0.82, bumpScale: 0.16 });
+        const saffronMat = new THREE.MeshStandardMaterial({ color: 0xb52c20, roughness: 0.9 });
+        for (let i = 0; i < 5; i++) {
+          const pod = add(new THREE.SphereGeometry(4.5, 24, 16), podMat, [(i - 2) * 5, -2 + (i % 2) * 2, 0], [0.72, 1.35, 0.72]);
+          pod.rotation.z = (i - 2) * 0.2;
+        }
+        for (let i = 0; i < 14; i++) {
+          const a = i * 1.3;
+          const thread = add(new THREE.CylinderGeometry(0.12, 0.12, 9, 6), saffronMat,
+            [Math.cos(a) * 7, 8 + Math.sin(a) * 4, Math.sin(a) * 7]);
+          thread.rotation.z = 0.6 * Math.sin(a);
+        }
+      } else if (name.includes('egg')) {
+        const whiteMat = new THREE.MeshPhysicalMaterial({ color: 0xfffdf4, roughness: 0.28, clearcoat: 0.3 });
+        const yolkMat = new THREE.MeshStandardMaterial({ color: 0xf2b82d, roughness: 0.42 });
+        sphere(whiteMat, [0, 0, 0], [1.25, 0.58, 0.95], 13);
+        sphere(yolkMat, [1, 2.2, 1], [0.75, 0.38, 0.72], 7.5);
+        const yolk2 = sphere(yolkMat, [-8, -3, -1], [0.75, 0.38, 0.72], 7.5);
+        yolk2.rotation.z = -0.6;
+      } else if (name.includes('gelatin')) {
+        const jellyMat = new THREE.MeshPhysicalMaterial({ color: 0xe8b2bd, transparent: true, opacity: 0.72, roughness: 0.16, transmission: 0.35, clearcoat: 0.9 });
+        const cube = add(new THREE.BoxGeometry(18, 15, 18, 3, 3, 3), jellyMat);
+        cube.rotation.set(0.14, 0.32, 0.08);
+      } else if (name.includes('marshmallow')) {
+        const marshMat = new THREE.MeshPhysicalMaterial({ color: 0xfffbf0, roughness: 0.68, clearcoat: 0.16 });
+        for (let i = 0; i < 7; i++) {
+          const puff = add(new THREE.CapsuleGeometry(4.3, 5.5, 8, 16), marshMat,
+            [(i % 3 - 1) * 8, Math.floor(i / 3) * 7 - 7, (i % 2) * 6]);
+          puff.rotation.z = (i % 3 - 1) * 0.25;
+        }
+      } else if (name.includes('chocolate')) {
+        const chocolateMat = makeMaterial('chocolate', '#4a2418', '#80503a', '#26130e', { roughness: 0.35, bumpScale: 0.08, clearcoat: 0.25 });
+        const bar = add(new THREE.BoxGeometry(22, 5, 14, 4, 1, 3), chocolateMat);
+        bar.rotation.set(0.1, 0.22, -0.08);
+        for (let i = 0; i < 6; i++) add(new THREE.BoxGeometry(6.5, 1.5, 5.5),
+          new THREE.MeshStandardMaterial({ color: 0x75432f, roughness: 0.38 }),
+          [-7.5 + (i % 3) * 7.5, 3.2, -3.5 + Math.floor(i / 3) * 7]);
+      } else if (name.includes('pineapple')) {
+        const fruitMat = makeMaterial('pineapple-chunk', '#d99a19', '#ffe073', '#9b5513', { roughness: 0.48, bumpScale: 0.18 });
+        add(new THREE.BoxGeometry(18, 15, 18, 3, 3, 3), fruitMat);
+      } else if (name.includes('chicken') || name.includes('fish') || name.includes('anchovy')) {
+        const proteinMat = makeMaterial('ingredient-protein', '#b87b70', '#e5b3a1', '#70483f', { roughness: 0.62, bumpScale: 0.12 });
+        for (let i = 0; i < 4; i++) {
+          const slice = sphere(proteinMat, [(i - 1.5) * 6, Math.sin(i) * 2, (i % 2) * 4], [1.2, 0.32, 0.65], 7);
+          slice.rotation.z = (i - 1.5) * 0.18;
+        }
+      } else if (name.includes('maple') || name.includes('oil') || name.includes('fish sauce')) {
+        addBottle('#7a4b1e', '#d99a3a', '#3c2112');
+      } else if (name.includes('bok choy')) {
+        addHerbSprig(6);
       } else {
         const spiceMat = makeMaterial('roasted-spice', '#a65f22', '#e5a64e', '#613516', { roughness: 0.84, bumpScale: 0.5 });
-        for (let i = 0; i < 5; i++) {
-          const radius = 4.4 + Math.random() * 1.9;
-          add(new THREE.SphereGeometry(radius, 36, 24), spiceMat,
-            [(i - 2) * 5.7, Math.sin(i * 2.1) * 3.2, Math.cos(i * 1.6) * 4],
-            [1, 0.82, 0.9]);
+        for (let i = 0; i < 9; i++) {
+          const radius = 2.8 + Math.random() * 1.4;
+          sphere(spiceMat, [(i - 4) * 3.4, Math.sin(i * 2.1) * 3.2, Math.cos(i * 1.6) * 4], [1, 0.82, 0.9], radius);
         }
       }
+
+      // A small, realistic garnish cue makes compound pantry ingredients read as composed food.
+      if (name.includes('& corn') || name.includes('sweet corn & bok choy')) addCorn();
+      if (name.includes('& onions') || name.includes('bell peppers & onions')) {
+        const onionMat = makeMaterial('red-onion-skin', '#9f3153', '#e9a1a9', '#5a203f', { roughness: 0.42, bumpScale: 0.18 });
+        add(new THREE.TorusGeometry(8, 1.8, 16, 64), onionMat, [13, -7, 0]);
+        add(new THREE.TorusGeometry(4, 1.15, 16, 48), paleMat, [13, -7, 0.5]);
+      }
+      return group;
+    };
       return group;
     };
 
@@ -11045,6 +11560,7 @@ Guidelines:
       if (!w || !h) return;
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
+      applyCameraZoom();
       renderer.setSize(w, h, false);
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, w < 640 ? 1.5 : 2));
     };
