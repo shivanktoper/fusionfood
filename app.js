@@ -3469,6 +3469,25 @@ class Fusion3DManager {
     potatoMesh.position.set(potatoState ? potatoState.x : 200, potatoState ? potatoState.y : 160, 0);
     scene.add(potatoMesh);
 
+    // Soft radial ground shadow. Keep it behind the potato in camera space.
+    const shadowCanvas = document.createElement('canvas');
+    shadowCanvas.width = shadowCanvas.height = 128;
+    const shadowContext = shadowCanvas.getContext('2d');
+    const shadowGradient = shadowContext.createRadialGradient(64, 64, 4, 64, 64, 62);
+    shadowGradient.addColorStop(0, 'rgba(20, 10, 4, 0.34)');
+    shadowGradient.addColorStop(0.55, 'rgba(20, 10, 4, 0.16)');
+    shadowGradient.addColorStop(1, 'rgba(20, 10, 4, 0)');
+    shadowContext.fillStyle = shadowGradient;
+    shadowContext.fillRect(0, 0, 128, 128);
+    const shadowTexture = new THREE.CanvasTexture(shadowCanvas);
+    const potatoShadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(108, 72),
+      new THREE.MeshBasicMaterial({ map: shadowTexture, transparent: true, depthWrite: false, toneMapped: false })
+    );
+    potatoShadow.position.set(potatoMesh.position.x, potatoMesh.position.y + 31, -42);
+    potatoShadow.renderOrder = -1;
+    scene.add(potatoShadow);
+
     // Orbiting golden roast sparkles
     const sparkleCount = 24;
     const sparkleGeom = new THREE.BufferGeometry();
@@ -3499,6 +3518,7 @@ class Fusion3DManager {
       camera,
       renderer,
       potatoMesh,
+      potatoShadow,
       sparkles,
       container,
       potatoState: potatoState || { x: 200, y: 160, vx: 3, vy: 0, rotation: 0, cookLevel: 0 },
@@ -3519,8 +3539,11 @@ class Fusion3DManager {
     sc.potatoState = p;
 
     // The 3D potato is rendered on the exact same frame as the game physics.
+    if (!sc.potatoMesh || !sc.potatoMesh.position) return;
     sc.potatoMesh.position.set(p.x, p.y, 0);
-    sc.potatoShadow.position.set(p.x, p.y + 31, -42);
+    if (sc.potatoShadow && sc.potatoShadow.position) {
+      sc.potatoShadow.position.set(p.x, p.y + 31, -42);
+    }
     sc.rotX += (p.vx || 0) * 0.035;
     sc.rotY += 0.018 + Math.min(0.018, Math.abs(p.vy || 0) * 0.001);
     sc.potatoMesh.rotation.set(sc.rotX, sc.rotY, p.rotation || 0);
