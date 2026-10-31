@@ -9,10 +9,10 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = filename => readFile(path.join(root, filename), "utf8");
 
 async function main() {
-  const [pages, worker, headers, middleware, app, bundle, keyHandler, sessionHandler] = await Promise.all([
+  const [pages, worker, headers, middleware, app, bundle, keyHandler, sessionHandler, publicConfig] = await Promise.all([
     read("wrangler.toml"), read("wrangler.worker.toml"), read("_headers"),
     read("functions/api/_middleware.js"), read("app.js"), read("bundle.js"),
-    read("functions/api/admin/keys.js"), read("functions/api/admin/session.js")
+    read("functions/api/admin/keys.js"), read("functions/api/admin/session.js"), read("functions/api/config.js")
   ]);
 
   assert.match(pages, /pages_build_output_dir\s*=\s*["'](\.|\.\/dist)["']/);
@@ -25,6 +25,8 @@ async function main() {
   assert.match(keyHandler, /requireAdmin/);
   assert.match(sessionHandler, /createAdminSession/);
   assert.match(app, /api\/admin\/session/);
+  assert.match(app, /appVersion:\s*[\'"]v2[\'"]/ , "The local app fallback must default to v2.");
+  assert.match(publicConfig, /appVersion:\s*"v2"/, "The public site configuration must default to v2.");
   assert.doesNotMatch(app, /careers2026/);
   assert.doesNotMatch(bundle, /careers2026/);
   assert.equal(app, bundle, "app.js and bundle.js must remain byte-identical");

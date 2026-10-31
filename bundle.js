@@ -4130,6 +4130,7 @@ class FusionApp {
       if (['1', 'v1'].includes(routeVersion) || routePath.endsWith('/v1')) this.state.appVersion = 'v1';
       else if (['2', 'v2'].includes(routeVersion) || routePath.endsWith('/v2')) this.state.appVersion = 'v2';
       else if (['3', 'v3'].includes(routeVersion) || routePath.endsWith('/v3')) this.state.appVersion = 'v3';
+      if (!['v1', 'v2', 'v3'].includes(this.state.appVersion)) this.state.appVersion = 'v2';
     }
     if (!this.state.completedCityQuests) {
       this.state.completedCityQuests = [];
@@ -5651,8 +5652,16 @@ class FusionApp {
     const use3DPotato = this.state.v2Features?.hotPotato3D !== false;
     let has3DPotato = false;
     if (use3DPotato && this.threeManager && this.threeManager.isSupported()) {
-      this.threeManager.initHotPotato3D(arena.querySelector('#hp-canvas-container'), potato);
-      has3DPotato = !!(this.threeManager.activeScenes && this.threeManager.activeScenes.hotPotato);
+      try {
+        const potatoContainer = arena.querySelector('#hp-canvas-container');
+        this.threeManager.initHotPotato3D(potatoContainer, potato);
+        has3DPotato = !!(this.threeManager.activeScenes && this.threeManager.activeScenes.hotPotato);
+      } catch (error) {
+        // A WebGL or 3D-scene setup problem must never prevent the 2D game from starting.
+        console.warn('Hot Potato 3D could not initialize; using the 2D fallback.', error);
+        this.threeManager.disposeScene('hotPotato');
+        has3DPotato = false;
+      }
     }
 
     // Particles array for sizzles and sparkles

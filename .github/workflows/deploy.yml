@@ -102,14 +102,7 @@ jobs:
       - name: Build Pages assets
         run: node scripts/build-pages.mjs
 
-      - name: Apply remote D1 migrations
-        uses: cloudflare/wrangler-action@v4
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          wranglerVersion: "4"
-          command: d1 migrations apply foodfusionweb --remote --config=wrangler.toml
-
+      # Publish the frontend first so browser fixes reach Pages even if D1 permissions need repair.
       - name: Deploy Cloudflare Pages
         uses: cloudflare/wrangler-action@v4
         with:
@@ -117,6 +110,14 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: "4"
           command: pages deploy dist --project-name=fusionfood --branch=main
+
+      - name: Apply remote D1 migrations
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: "4"
+          command: d1 migrations apply foodfusionweb --remote --config=wrangler.toml
 
       - name: Deploy API-only Cloudflare Worker
         uses: cloudflare/wrangler-action@v4
